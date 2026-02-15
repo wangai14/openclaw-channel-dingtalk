@@ -49,6 +49,7 @@ export interface DingTalkChannelConfig {
   robotCode?: string;
   corpId?: string;
   agentId?: string;
+  name?: string;
   dmPolicy?: 'open' | 'pairing' | 'allowlist';
   groupPolicy?: 'open' | 'allowlist';
   allowFrom?: string[];
@@ -59,7 +60,6 @@ export interface DingTalkChannelConfig {
   cardTemplateKey?: string;
   groups?: Record<string, { systemPrompt?: string }>;
   accounts?: Record<string, DingTalkConfig>;
-  // Connection robustness configuration
   maxConnectionAttempts?: number;
   initialReconnectDelay?: number;
   maxReconnectDelay?: number;
@@ -416,6 +416,22 @@ export interface DingTalkChannelPlugin {
     configPrefixes: string[];
     noopPrefixes?: string[];
   };
+  onboarding?: {
+    channel: string;
+    getStatus: (params: { cfg: OpenClawConfig }) => Promise<{
+      channel: string;
+      configured: boolean;
+      statusLines: string[];
+      selectionHint: string;
+      quickstartScore: number;
+    }>;
+    configure: (params: {
+      cfg: OpenClawConfig;
+      prompter: unknown;
+      accountOverrides: Record<string, string>;
+      shouldPromptAccountIds: boolean;
+    }) => Promise<{ cfg: OpenClawConfig; accountId: string }>;
+  };
   config: {
     listAccountIds: (cfg: OpenClawConfig) => string[];
     resolveAccount: (cfg: OpenClawConfig, accountId?: string | null) => ResolvedAccount & { configured: boolean };
@@ -641,4 +657,96 @@ export interface ConnectionAttemptResult {
   attempt: number;
   error?: Error;
   nextDelay?: number;
+}
+
+// ============ Onboarding Helper Functions ============
+
+const DEFAULT_ACCOUNT_ID = 'default';
+
+/**
+ * List all DingTalk account IDs from config
+ */
+export function listDingTalkAccountIds(cfg: OpenClawConfig): string[] {
+  const dingtalk = cfg.channels?.dingtalk as DingTalkChannelConfig | undefined;
+  if (!dingtalk) return [];
+
+  const accountIds: string[] = [];
+
+  // Check for direct configuration (default account)
+  if (dingtalk.clientId || dingtalk.clientSecret) {
+    accountIds.push(DEFAULT_ACCOUNT_ID);
+  }
+
+  // Check accounts object
+  if (dingtalk.accounts) {
+    accountIds.push(...Object.keys(dingtalk.accounts));
+  }
+
+  return accountIds;
+}
+
+/**
+ * Resolved DingTalk account with configuration status
+ */
+export interface ResolvedDingTalkAccount extends DingTalkConfig {
+  accountId: string;
+  configured: boolean;
+}
+
+/**
+ * Resolve a specific DingTalk account configuration
+ */
+export function resolveDingTalkAccount(cfg: OpenClawConfig, accountId?: string | null): ResolvedDingTalkAccount {
+  const id = accountId || DEFAULT_ACCOUNT_ID;
+  const dingtalk = cfg.channels?.dingtalk as DingTalkChannelConfig | undefined;
+
+  // If default account, return top-level config
+  if (id === DEFAULT_ACCOUNT_ID) {
+    const config: DingTalkConfig = {
+      clientId: dingtalk?.clientId ?? '',
+      clientSecret: dingtalk?.clientSecret ?? '',
+      robotCode: dingtalk?.robotCode,
+      corpId: dingtalk?.corpId,
+      agentId: dingtalk?.agentId,
+      name: dingtalk?.name,
+      enabled: dingtalk?.enabled,
+      dmPolicy: dingtalk?.dmPolicy,
+      groupPolicy: dingtalk?.groupPolicy,
+      allowFrom: dingtalk?.allowFrom,
+      showThinking: dingtalk?.showThinking,
+      debug: dingtalk?.debug,
+      messageType: dingtalk?.messageType,
+      cardTemplateId: dingtalk?.cardTemplateId,
+      cardTemplateKey: dingtalk?.cardTemplateKey,
+      groups: dingtalk?.groups,
+      accounts: dingtalk?.accounts,
+      maxConnectionAttempts: dingtalk?.maxConnectionAttempts,
+      initialReconnectDelay: dingtalk?.initialReconnectDelay,
+      maxReconnectDelay: dingtalk?.maxReconnectDelay,
+      reconnectJitter: dingtalk?.reconnectJitter,
+    };
+    return {
+      ...config,
+      accountId: id,
+      configured: Boolean(config.clientId && config.clientSecret),
+    };
+  }
+
+  // If named account, get from accounts object
+  const accountConfig = dingtalk?.accounts?.[id];
+  if (accountConfig) {
+    return {
+      ...accountConfig,
+      accountId: id,
+      configured: Boolean(accountConfig.clientId && accountConfig.clientSecret),
+    };
+  }
+
+  // Account doesn't exist, return empty config
+  return {
+    clientId: '',
+    clientSecret: '',
+    accountId: id,
+    configured: false,
+  };
 }

@@ -11,6 +11,7 @@ import { getDingTalkRuntime } from './runtime';
 import { DingTalkConfigSchema } from './config-schema.js';
 import { registerPeerId, resolveOriginalPeerId } from './peer-id-registry';
 import { ConnectionManager } from './connection-manager';
+import { dingtalkOnboardingAdapter } from './onboarding.js';
 import type {
   DingTalkConfig,
   TokenInfo,
@@ -1360,6 +1361,22 @@ export const dingtalkPlugin: DingTalkChannelPlugin = {
     aliases: ['dd', 'ding'],
   },
   configSchema: buildChannelConfigSchema(DingTalkConfigSchema),
+  onboarding: dingtalkOnboardingAdapter as {
+    channel: string;
+    getStatus: (params: { cfg: OpenClawConfig }) => Promise<{
+      channel: string;
+      configured: boolean;
+      statusLines: string[];
+      selectionHint: string;
+      quickstartScore: number;
+    }>;
+    configure: (params: {
+      cfg: OpenClawConfig;
+      prompter: unknown;
+      accountOverrides: Record<string, string>;
+      shouldPromptAccountIds: boolean;
+    }) => Promise<{ cfg: OpenClawConfig; accountId: string }>;
+  },
   capabilities: {
     chatTypes: ['direct', 'group'],
     reactions: false,
