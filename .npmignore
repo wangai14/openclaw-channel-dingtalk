@@ -22,6 +22,11 @@ tsconfig.json
 .vscode/
 .opencode/
 
+# OpenCode and tooling files
+.oxfmtrc.jsonc
+.oxlintrc.json
+.sisyphus/
+
 # Logs and credentials
 *.log
 npm-debug.log*
