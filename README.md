@@ -19,18 +19,10 @@
 手动通过 npm 包名安装：
 
 ```bash
-openclaw plugins install @soimy/openclaw-dingtalk
+openclaw plugins install openclaw-dingtalk
 ```
 
-### 方法 B：通过远程仓库安装
-
-直接运行 openclaw 插件安装命令，openclaw 会自动处理下载、安装依赖和注册：
-
-```bash
-openclaw plugins install https://github.com/soimy/openclaw-channel-dingtalk.git
-```
-
-### 方法 C：通过本地源码安装
+### 方法 B：通过本地源码安装
 
 如果你想对插件进行二次开发，可以先克隆仓库：
 
@@ -46,7 +38,7 @@ npm install
 openclaw plugins install -l .
 ```
 
-### 方法 D：手动安装
+### 方法 C：手动安装
 
 1. 将本目录下载或复制到 `~/.openclaw/extensions/dingtalk`。
 2. 确保包含 `index.ts`, `openclaw.plugin.json` 和 `package.json`。
