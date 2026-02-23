@@ -31,6 +31,21 @@ export class ConnectionManager {
   private attemptCount: number = 0;
   private reconnectTimer?: NodeJS.Timeout;
   private stopped: boolean = false;
+  private connectedAt?: number;
+  private consecutiveUnhealthyChecks: number = 0;
+
+  private static readonly HEALTH_CHECK_INTERVAL_MS = 5000;
+  private static readonly HEALTH_CHECK_GRACE_MS = 3000;
+  private static readonly HEALTH_CHECK_UNHEALTHY_THRESHOLD = 2;
+  private runtimeCounters = {
+    healthUnhealthyChecks: 0,
+    healthTriggeredReconnects: 0,
+    socketCloseEvents: 0,
+    runtimeDisconnects: 0,
+    reconnectAttempts: 0,
+    reconnectSuccess: 0,
+    reconnectFailures: 0,
+  };
 
   // Runtime monitoring resources
   private healthCheckInterval?: NodeJS.Timeout;
@@ -59,6 +74,13 @@ export class ConnectionManager {
     if (this.config.onStateChange) {
       this.config.onStateChange(this.state, error);
     }
+  }
+
+  private logRuntimeCounters(reason: string): void {
+    const c = this.runtimeCounters;
+    this.log?.info?.(
+      `[${this.accountId}] Runtime counters (${reason}): healthUnhealthyChecks=${c.healthUnhealthyChecks}, healthTriggeredReconnects=${c.healthTriggeredReconnects}, socketCloseEvents=${c.socketCloseEvents}, runtimeDisconnects=${c.runtimeDisconnects}, reconnectAttempts=${c.reconnectAttempts}, reconnectSuccess=${c.reconnectSuccess}, reconnectFailures=${c.reconnectFailures}`,
+    );
   }
 
   /**
@@ -130,6 +152,8 @@ export class ConnectionManager {
 
       // Connection successful
       this.state = ConnectionStateEnum.CONNECTED;
+      this.connectedAt = Date.now();
+      this.consecutiveUnhealthyChecks = 0;
       this.notifyStateChange();
       const successfulAttempt = this.attemptCount;
       this.attemptCount = 0; // Reset counter on success
@@ -230,17 +254,51 @@ export class ConnectionManager {
         return;
       }
 
-      // If we believe we're connected but DWClient disagrees, trigger reconnection
-      if (this.state === ConnectionStateEnum.CONNECTED && !client.connected) {
-        this.log?.warn?.(
-          `[${this.accountId}] Connection health check failed - detected disconnection`,
-        );
-        if (this.healthCheckInterval) {
-          clearInterval(this.healthCheckInterval);
-        }
-        this.handleRuntimeDisconnection();
+      if (this.state !== ConnectionStateEnum.CONNECTED) {
+        this.consecutiveUnhealthyChecks = 0;
+        return;
       }
-    }, 5000); // Check every 5 seconds
+
+      const now = Date.now();
+      const withinGraceWindow =
+        this.connectedAt !== undefined &&
+        now - this.connectedAt < ConnectionManager.HEALTH_CHECK_GRACE_MS;
+      if (withinGraceWindow) {
+        this.consecutiveUnhealthyChecks = 0;
+        return;
+      }
+
+      const socketReadyState = (client.socket as { readyState?: number } | undefined)?.readyState;
+      const socketOpen = socketReadyState === 1;
+      const unhealthy = !client.connected && !socketOpen;
+
+      if (!unhealthy) {
+        this.consecutiveUnhealthyChecks = 0;
+        return;
+      }
+
+      this.consecutiveUnhealthyChecks += 1;
+      this.runtimeCounters.healthUnhealthyChecks += 1;
+      if (
+        this.consecutiveUnhealthyChecks <
+        ConnectionManager.HEALTH_CHECK_UNHEALTHY_THRESHOLD
+      ) {
+        this.log?.debug?.(
+          `[${this.accountId}] Connection health check unhealthy (${this.consecutiveUnhealthyChecks}/${ConnectionManager.HEALTH_CHECK_UNHEALTHY_THRESHOLD}) connected=${String(client.connected)} socketReadyState=${socketReadyState ?? "unknown"}`,
+        );
+        return;
+      }
+
+      this.log?.warn?.(
+        `[${this.accountId}] Connection health check failed - detected disconnection`,
+      );
+      this.runtimeCounters.healthTriggeredReconnects += 1;
+      this.logRuntimeCounters("health-triggered-reconnect");
+      if (this.healthCheckInterval) {
+        clearInterval(this.healthCheckInterval);
+      }
+      this.handleRuntimeDisconnection();
+    }, ConnectionManager.HEALTH_CHECK_INTERVAL_MS);
 
     // Additionally, if we have access to the socket, monitor its events
     // The DWClient uses 'ws' WebSocket library which extends EventEmitter
@@ -251,9 +309,11 @@ export class ConnectionManager {
 
       // Handler for socket close event
       this.socketCloseHandler = (code: number, reason: string) => {
+        this.runtimeCounters.socketCloseEvents += 1;
         this.log?.warn?.(
           `[${this.accountId}] WebSocket closed event (code: ${code}, reason: ${reason || "none"})`,
         );
+        this.logRuntimeCounters("socket-close");
 
         // Only trigger reconnection if we were previously connected and not stopping
         if (!this.stopped && this.state === ConnectionStateEnum.CONNECTED) {
@@ -319,10 +379,13 @@ export class ConnectionManager {
     this.log?.warn?.(
       `[${this.accountId}] Runtime disconnection detected, initiating reconnection...`,
     );
+    this.runtimeCounters.runtimeDisconnects += 1;
 
     this.state = ConnectionStateEnum.DISCONNECTED;
     this.notifyStateChange("Runtime disconnection detected");
     this.attemptCount = 0; // Reset attempt counter for runtime reconnection
+    this.connectedAt = undefined;
+    this.consecutiveUnhealthyChecks = 0;
 
     // Clear any existing timer
     this.clearReconnectTimer();
@@ -349,17 +412,24 @@ export class ConnectionManager {
     }
 
     this.log?.info?.(`[${this.accountId}] Attempting to reconnect...`);
+    this.runtimeCounters.reconnectAttempts += 1;
 
     try {
       await this.connect();
       this.log?.info?.(`[${this.accountId}] Reconnection successful`);
+      this.runtimeCounters.reconnectSuccess += 1;
+      this.logRuntimeCounters("reconnect-success");
     } catch (err: any) {
       if (this.stopped) {
         return;
       }
 
       this.log?.error?.(`[${this.accountId}] Reconnection failed: ${err.message}`);
+      this.runtimeCounters.reconnectFailures += 1;
+      this.logRuntimeCounters("reconnect-failed");
       this.state = ConnectionStateEnum.FAILED;
+      this.connectedAt = undefined;
+      this.consecutiveUnhealthyChecks = 0;
       this.notifyStateChange(err.message);
 
       // Continue runtime recovery instead of getting stuck in FAILED.
@@ -387,6 +457,8 @@ export class ConnectionManager {
 
     this.stopped = true;
     this.state = ConnectionStateEnum.DISCONNECTING;
+    this.connectedAt = undefined;
+    this.consecutiveUnhealthyChecks = 0;
 
     // Clear reconnect timer
     this.clearReconnectTimer();

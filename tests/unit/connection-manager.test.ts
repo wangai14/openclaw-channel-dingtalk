@@ -89,9 +89,33 @@ describe('ConnectionManager', () => {
         client.connected = false;
 
         await vi.advanceTimersByTimeAsync(5000);
+        await vi.advanceTimersByTimeAsync(5000);
         await vi.advanceTimersByTimeAsync(120);
 
         expect(client.connect.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('does not reconnect during the initial health check grace window', async () => {
+        const socket = new EventEmitter();
+        const client = {
+            connected: true,
+            socket,
+            connect: vi.fn().mockResolvedValue(undefined),
+            disconnect: vi.fn(),
+        } as any;
+
+        const manager = new ConnectionManager(client, 'main', {
+            maxAttempts: 2,
+            initialDelay: 100,
+            maxDelay: 1000,
+            jitter: 0,
+        });
+
+        await manager.connect();
+        client.connected = false;
+
+        await vi.advanceTimersByTimeAsync(2500);
+        expect(client.connect).toHaveBeenCalledTimes(1);
     });
 
     it('stop disconnects client and resolves waitForStop', async () => {
@@ -159,7 +183,7 @@ describe('ConnectionManager', () => {
     });
 
     it('cancels in-flight connect when stopped during connect', async () => {
-        let resolveConnect: (() => void) | null = null;
+        let resolveConnect: ((value?: void | PromiseLike<void>) => void) | undefined;
         const connectPromise = new Promise<void>((resolve) => {
             resolveConnect = resolve;
         });
@@ -207,6 +231,12 @@ describe('ConnectionManager', () => {
 
     it('reacts to socket close event by scheduling reconnect', async () => {
         const socket = new EventEmitter();
+        const log = {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+        };
         const client = {
             connected: true,
             socket,
@@ -219,12 +249,13 @@ describe('ConnectionManager', () => {
             initialDelay: 100,
             maxDelay: 1000,
             jitter: 0,
-        });
+        }, log);
 
         await manager.connect();
         socket.emit('close', 1006, 'lost');
         await vi.advanceTimersByTimeAsync(120);
 
         expect(client.connect.mock.calls.length).toBeGreaterThanOrEqual(2);
+        expect(log.info).toHaveBeenCalledWith(expect.stringContaining('Runtime counters (socket-close)'));
     });
 });
