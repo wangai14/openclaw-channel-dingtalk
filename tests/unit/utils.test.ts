@@ -2,7 +2,13 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanupOrphanedTempFiles, maskSensitiveData, retryWithBackoff } from '../../src/utils';
+import {
+    cleanupOrphanedTempFiles,
+    formatDingTalkErrorPayload,
+    formatDingTalkErrorPayloadLog,
+    maskSensitiveData,
+    retryWithBackoff,
+} from '../../src/utils';
 
 describe('utils', () => {
     describe('maskSensitiveData', () => {
@@ -29,6 +35,27 @@ describe('utils', () => {
         });
     });
 
+    describe('formatDingTalkErrorPayload', () => {
+        it('formats code and message with serialized payload', () => {
+            const text = formatDingTalkErrorPayload({ code: 'invalidParameter', message: 'robotCode required' });
+
+            expect(text).toContain('code=invalidParameter');
+            expect(text).toContain('message=robotCode required');
+            expect(text).toContain('payload={"code":"invalidParameter","message":"robotCode required"}');
+        });
+
+        it('builds log text with unified error payload prefix', () => {
+            const text = formatDingTalkErrorPayloadLog('send.message', {
+                code: 'invalidParameter',
+                message: 'userIds required',
+            });
+
+            expect(text).toContain('[DingTalk][ErrorPayload][send.message]');
+            expect(text).toContain('code=invalidParameter');
+            expect(text).toContain('message=userIds required');
+        });
+    });
+
     describe('retryWithBackoff', () => {
         it('retries retryable status and eventually succeeds', async () => {
             vi.useFakeTimers();
@@ -51,6 +78,25 @@ describe('utils', () => {
 
             await expect(retryWithBackoff(fn, { maxRetries: 3, baseDelayMs: 10 })).rejects.toBeDefined();
             expect(fn).toHaveBeenCalledTimes(1);
+        });
+
+        it('logs payload details with unified prefix before retry decision', async () => {
+            const fn = vi
+                .fn<() => Promise<string>>()
+                .mockRejectedValue({ response: { status: 400, data: { code: 'invalidParameter', message: 'bad payload' } } });
+            const log = { debug: vi.fn() };
+
+            await expect(retryWithBackoff(fn, { maxRetries: 3, baseDelayMs: 10, log: log as any })).rejects.toBeDefined();
+
+            const debugLogs = log.debug.mock.calls.map((args: unknown[]) => String(args[0]));
+            expect(
+                debugLogs.some(
+                    (entry) =>
+                        entry.includes('[DingTalk][ErrorPayload][retry.beforeDecision]') &&
+                        entry.includes('code=invalidParameter') &&
+                        entry.includes('message=bad payload')
+                )
+            ).toBe(true);
         });
     });
 

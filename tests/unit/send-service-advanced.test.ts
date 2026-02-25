@@ -62,15 +62,28 @@ describe('send-service advanced branches', () => {
     });
 
     it('returns {ok:false} when proactive send throws', async () => {
-        mockedAxios.mockRejectedValueOnce(new Error('network failed'));
+        mockedAxios.mockRejectedValueOnce({
+            message: 'network failed',
+            response: { data: { code: 'invalidParameter', message: 'robotCode missing' } },
+        });
+        const log = { error: vi.fn() };
 
         const result = await sendMessage(
             { clientId: 'id', clientSecret: 'sec', robotCode: 'id' } as any,
             'cidA1B2C3',
             'text',
-            {}
+            { log: log as any }
         );
 
         expect(result).toEqual({ ok: false, error: 'network failed' });
+        const logs = log.error.mock.calls.map((args: unknown[]) => String(args[0]));
+        expect(
+            logs.some(
+                (entry) =>
+                    entry.includes('[DingTalk][ErrorPayload][send.message]') &&
+                    entry.includes('code=invalidParameter') &&
+                    entry.includes('message=robotCode missing')
+            )
+        ).toBe(true);
     });
 });

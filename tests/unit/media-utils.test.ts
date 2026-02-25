@@ -71,18 +71,33 @@ describe('media-utils', () => {
     });
 
     it('returns null when axios upload throws', async () => {
-        const mediaPath = createTempFile(Buffer.from('hello'));        
-        mockedAxiosPost.mockRejectedValueOnce({ isAxiosError: true, response: { data: { errcode: 400 } } });
+        const mediaPath = createTempFile(Buffer.from('hello'));
+        const log = { error: vi.fn(), debug: vi.fn() };
+        mockedAxiosPost.mockRejectedValueOnce({
+            isAxiosError: true,
+            response: { status: 400, statusText: 'Bad Request', data: { code: 'invalidParameter', message: 'file invalid' } },
+            message: 'upload failed',
+        });
 
         const mediaId = await uploadMedia(
             { clientId: 'id', clientSecret: 'sec' } as any,
             mediaPath,
             'file',
-            vi.fn().mockResolvedValue('token_abc')
+            vi.fn().mockResolvedValue('token_abc'),
+            log as any
         );
 
         expect(mediaId).toBeNull();
         expect(mockedAxiosPost).toHaveBeenCalledTimes(1);
+        const logs = log.error.mock.calls.map((args: unknown[]) => String(args[0]));
+        expect(
+            logs.some(
+                (entry) =>
+                    entry.includes('[DingTalk][ErrorPayload][media.upload]') &&
+                    entry.includes('code=invalidParameter') &&
+                    entry.includes('message=file invalid')
+            )
+        ).toBe(true);
 
         fs.rmSync(path.dirname(mediaPath), { recursive: true, force: true });
     });

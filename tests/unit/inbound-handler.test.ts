@@ -359,13 +359,17 @@ describe('inbound-handler', () => {
         shared.getRuntimeMock.mockReturnValueOnce(runtime);
         const card = { cardInstanceId: 'card_3', state: '1', lastUpdated: Date.now() } as any;
         shared.createAICardMock.mockResolvedValueOnce(card);
-        shared.finishAICardMock.mockRejectedValueOnce(new Error('finish failed'));
+        shared.finishAICardMock.mockRejectedValueOnce({
+            message: 'finish failed',
+            response: { data: { code: 'invalidParameter', message: 'cannot finalize' } },
+        });
+        const log = { debug: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() };
 
         await handleDingTalkMessage({
             cfg: {},
             accountId: 'main',
             sessionWebhook: 'https://session.webhook',
-            log: undefined,
+            log: log as any,
             dingtalkConfig: { dmPolicy: 'open', messageType: 'card' } as any,
             data: {
                 msgId: 'm7',
@@ -381,6 +385,15 @@ describe('inbound-handler', () => {
         } as any);
 
         expect(card.state).toBe('5');
+        const debugLogs = log.debug.mock.calls.map((args: unknown[]) => String(args[0]));
+        expect(
+            debugLogs.some(
+                (entry) =>
+                    entry.includes('[DingTalk][ErrorPayload][inbound.cardFinalize]') &&
+                    entry.includes('code=invalidParameter') &&
+                    entry.includes('message=cannot finalize')
+            )
+        ).toBe(true);
     });
 
     it('handleDingTalkMessage group card flow reuses active card and streams tool/reasoning', async () => {
