@@ -59,6 +59,31 @@ export function getProactiveRiskObservation(
   return entry;
 }
 
+export function getProactiveRiskObservationForAny(
+  accountId: string,
+  targetIds: Array<string | null | undefined>,
+  nowMs = Date.now(),
+): ProactiveRiskSnapshot | null {
+  for (const candidate of targetIds) {
+    if (!candidate) {
+      continue;
+    }
+    const observation = getProactiveRiskObservation(accountId, candidate, nowMs);
+    if (observation) {
+      return observation;
+    }
+  }
+  return null;
+}
+
+export function deleteProactiveRiskObservation(accountId: string, targetId: string): void {
+  const target = targetId?.trim();
+  if (!accountId || !target) {
+    return;
+  }
+  store.delete(keyOf(accountId, target));
+}
+
 export function clearProactiveRiskObservationsForTest(): void {
   store.clear();
 }

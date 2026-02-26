@@ -32,6 +32,7 @@ vi.mock('../../src/card-service', () => ({
 import { sendMessage } from '../../src/send-service';
 import {
     clearProactiveRiskObservationsForTest,
+    getProactiveRiskObservation,
     recordProactiveRiskObservation,
 } from '../../src/proactive-risk-registry';
 import { AICardStatus } from '../../src/types';
@@ -117,5 +118,29 @@ describe('send-service advanced branches', () => {
         expect(result).toEqual({ ok: false, error: 'forbidden' });
         const logs = log.error.mock.calls.map((args: unknown[]) => String(args[0]));
         expect(logs.some((entry) => entry.includes('proactiveRisk=high:numeric-user-id'))).toBe(true);
+    });
+
+    it('records proactive API risk observation when permission denied is returned', async () => {
+        mockedAxios.mockRejectedValueOnce({
+            message: 'forbidden',
+            response: {
+                status: 403,
+                data: { code: 'Forbidden.AccessDenied.AccessTokenPermissionDenied' },
+            },
+        });
+
+        const result = await sendMessage(
+            { clientId: 'id', clientSecret: 'sec', robotCode: 'id' } as any,
+            'manager123',
+            'text',
+            { accountId: 'main' } as any,
+        );
+
+        expect(result).toEqual({ ok: false, error: 'forbidden' });
+        expect(getProactiveRiskObservation('main', 'manager123')).toMatchObject({
+            source: 'proactive-api',
+            level: 'high',
+            reason: 'Forbidden.AccessDenied.AccessTokenPermissionDenied',
+        });
     });
 });

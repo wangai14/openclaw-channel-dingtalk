@@ -57,6 +57,7 @@ import {
     handleDingTalkMessage,
     resetProactivePermissionHintStateForTest,
 } from '../../src/inbound-handler';
+import { recordProactiveRiskObservation } from '../../src/proactive-risk-registry';
 
 const mockedAxiosPost = vi.mocked(axios.post);
 const mockedAxiosGet = vi.mocked(axios.get);
@@ -452,7 +453,14 @@ describe('inbound-handler', () => {
         expect(shared.finishAICardMock).toHaveBeenCalledTimes(1);
     });
 
-    it('sends proactive permission hint for numeric senderStaffId in direct chat', async () => {
+    it('sends proactive permission hint when proactive API risk was observed', async () => {
+        recordProactiveRiskObservation({
+            accountId: 'main',
+            targetId: 'manager123',
+            level: 'high',
+            reason: 'Forbidden.AccessDenied.AccessTokenPermissionDenied',
+            source: 'proactive-api',
+        });
         shared.sendBySessionMock.mockResolvedValue(undefined);
 
         await handleDingTalkMessage({
@@ -473,7 +481,6 @@ describe('inbound-handler', () => {
                 conversationType: '1',
                 conversationId: 'cid_ok',
                 senderId: 'manager123',
-                senderStaffId: '0341234567',
                 chatbotUserId: 'bot_1',
                 sessionWebhook: 'https://session.webhook',
                 createAt: Date.now(),
@@ -485,6 +492,13 @@ describe('inbound-handler', () => {
     });
 
     it('sends proactive permission hint only once within cooldown window', async () => {
+        recordProactiveRiskObservation({
+            accountId: 'main',
+            targetId: 'manager123',
+            level: 'high',
+            reason: 'Forbidden.AccessDenied.AccessTokenPermissionDenied',
+            source: 'proactive-api',
+        });
         shared.sendBySessionMock.mockResolvedValue(undefined);
 
         const params = {
@@ -505,7 +519,6 @@ describe('inbound-handler', () => {
                 conversationType: '1',
                 conversationId: 'cid_ok',
                 senderId: 'manager123',
-                senderStaffId: '0341234567',
                 chatbotUserId: 'bot_1',
                 sessionWebhook: 'https://session.webhook',
                 createAt: Date.now(),
@@ -516,5 +529,70 @@ describe('inbound-handler', () => {
         await handleDingTalkMessage(params);
 
         expect(shared.sendBySessionMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not send proactive permission hint without proactive API risk observation', async () => {
+        shared.sendBySessionMock.mockResolvedValue(undefined);
+
+        await handleDingTalkMessage({
+            cfg: {},
+            accountId: 'main',
+            sessionWebhook: 'https://session.webhook',
+            log: undefined,
+            dingtalkConfig: {
+                dmPolicy: 'open',
+                messageType: 'markdown',
+                showThinking: false,
+                proactivePermissionHint: { enabled: true, cooldownHours: 24 },
+            } as any,
+            data: {
+                msgId: 'm11',
+                msgtype: 'text',
+                text: { content: 'hello' },
+                conversationType: '1',
+                conversationId: 'cid_ok',
+                senderId: '0341234567',
+                chatbotUserId: 'bot_1',
+                sessionWebhook: 'https://session.webhook',
+                createAt: Date.now(),
+            },
+        } as any);
+
+        expect(shared.sendBySessionMock).not.toHaveBeenCalled();
+    });
+
+    it('does not leak unhandled stop reason text to outbound chat messages', async () => {
+        const runtime = buildRuntime();
+        runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher = vi.fn().mockImplementation(async ({ dispatcherOptions }) => {
+            await dispatcherOptions.deliver({ text: 'Unhandled stop reason: network_error' }, { kind: 'final' });
+            return { queuedFinal: 'Unhandled stop reason: network_error' };
+        });
+        shared.getRuntimeMock.mockReturnValueOnce(runtime);
+
+        await handleDingTalkMessage({
+            cfg: {},
+            accountId: 'main',
+            sessionWebhook: 'https://session.webhook',
+            log: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+            dingtalkConfig: { dmPolicy: 'open', messageType: 'markdown', showThinking: false } as any,
+            data: {
+                msgId: 'm12',
+                msgtype: 'text',
+                text: { content: 'hello' },
+                conversationType: '1',
+                conversationId: 'cid_ok',
+                senderId: 'user_1',
+                chatbotUserId: 'bot_1',
+                sessionWebhook: 'https://session.webhook',
+                createAt: Date.now(),
+            },
+        } as any);
+
+        expect(shared.sendMessageMock).not.toHaveBeenCalledWith(
+            expect.anything(),
+            expect.anything(),
+            expect.stringContaining('Unhandled stop reason:'),
+            expect.anything(),
+        );
     });
 });

@@ -13,7 +13,11 @@ import { getLogger } from "./logger-context";
 import { uploadMedia as uploadMediaUtil } from "./media-utils";
 import { detectMarkdownAndExtractTitle } from "./message-utils";
 import { resolveOriginalPeerId } from "./peer-id-registry";
-import { getProactiveRiskObservation } from "./proactive-risk-registry";
+import {
+  deleteProactiveRiskObservation,
+  getProactiveRiskObservation,
+  recordProactiveRiskObservation,
+} from "./proactive-risk-registry";
 import { formatDingTalkErrorPayloadLog } from "./utils";
 import type {
   AxiosResponse,
@@ -26,6 +30,38 @@ import type {
 import { AICardStatus } from "./types";
 
 export { detectMediaTypeFromExtension } from "./media-utils";
+
+function extractErrorCodeFromResponseData(data: unknown): string | null {
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  const payload = data as Record<string, unknown>;
+  const code = payload.code;
+  if (typeof code === "string" && code.trim()) {
+    return code.trim();
+  }
+
+  const subCode = payload.subCode;
+  if (typeof subCode === "string" && subCode.trim()) {
+    return subCode.trim();
+  }
+
+  return null;
+}
+
+function isProactivePermissionOrScopeError(code: string | null): boolean {
+  if (!code) {
+    return false;
+  }
+  return (
+    code.startsWith("Forbidden.AccessDenied") ||
+    code === "invalidParameter.userIds.invalid" ||
+    code === "invalidParameter.userIds.empty" ||
+    code === "invalidParameter.openConversationId.invalid" ||
+    code === "invalidParameter.robotCode.empty"
+  );
+}
 
 /**
  * Wrapper to upload media with shared getAccessToken binding.
@@ -94,6 +130,9 @@ export async function sendProactiveTextOrMarkdown(
       data: payload,
       headers: { "x-acs-dingtalk-access-token": token, "Content-Type": "application/json" },
     });
+    if (options.accountId) {
+      deleteProactiveRiskObservation(options.accountId, resolvedTarget);
+    }
     return result.data;
   } catch (err: unknown) {
     const maybeAxiosError = err as {
@@ -101,6 +140,16 @@ export async function sendProactiveTextOrMarkdown(
       message?: string;
     };
     if (maybeAxiosError?.response) {
+      const errCode = extractErrorCodeFromResponseData(maybeAxiosError.response.data);
+      if (options.accountId && isProactivePermissionOrScopeError(errCode)) {
+        recordProactiveRiskObservation({
+          accountId: options.accountId,
+          targetId: resolvedTarget,
+          level: "high",
+          reason: errCode || "proactive-permission-error",
+          source: "proactive-api",
+        });
+      }
       const status = maybeAxiosError.response.status;
       const statusText = maybeAxiosError.response.statusText;
       const statusLabel = status ? ` status=${status}${statusText ? ` ${statusText}` : ""}` : "";
@@ -190,6 +239,9 @@ export async function sendProactiveMedia(
       data: payload,
       headers: { "x-acs-dingtalk-access-token": token, "Content-Type": "application/json" },
     });
+    if (options.accountId) {
+      deleteProactiveRiskObservation(options.accountId, resolvedTarget);
+    }
 
     const messageId = result.data?.processQueryKey || result.data?.messageId;
     return { ok: true, data: result.data, messageId };
@@ -203,6 +255,16 @@ export async function sendProactiveMedia(
       ? ` proactiveRisk=${proactiveRisk.level}:${proactiveRisk.reason}`
       : "";
     if (axios.isAxiosError(err) && err.response) {
+      const errCode = extractErrorCodeFromResponseData(err.response.data);
+      if (options.accountId && isProactivePermissionOrScopeError(errCode)) {
+        recordProactiveRiskObservation({
+          accountId: options.accountId,
+          targetId: normalizedTarget,
+          level: "high",
+          reason: errCode || "proactive-permission-error",
+          source: "proactive-api",
+        });
+      }
       const status = err.response.status;
       const statusText = err.response.statusText;
       const statusLabel = status ? ` status=${status}${statusText ? ` ${statusText}` : ""}` : "";

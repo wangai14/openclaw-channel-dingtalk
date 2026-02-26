@@ -18,7 +18,7 @@ import { extractMessageContent } from "./message-utils";
 import { registerPeerId } from "./peer-id-registry";
 import {
   clearProactiveRiskObservationsForTest,
-  recordProactiveRiskObservation,
+  getProactiveRiskObservationForAny,
 } from "./proactive-risk-registry";
 import { getDingTalkRuntime } from "./runtime";
 import { sendBySession, sendMessage } from "./send-service";
@@ -51,8 +51,17 @@ function shouldSendProactivePermissionHint(params: {
     return false;
   }
 
-  const targetId = (params.senderStaffId || params.senderId || "").trim();
-  if (!targetId || !/^\d+$/.test(targetId)) {
+  const targetId = (params.senderId || "").trim();
+  if (!targetId) {
+    return false;
+  }
+
+  const riskObservation = getProactiveRiskObservationForAny(
+    params.accountId,
+    [params.senderId, params.senderStaffId],
+    params.nowMs,
+  );
+  if (!riskObservation || riskObservation.source !== "proactive-api") {
     return false;
   }
 
@@ -69,6 +78,14 @@ function shouldSendProactivePermissionHint(params: {
 
   proactiveHintLastSentAt.set(key, params.nowMs);
   return true;
+}
+
+function isUnhandledStopReasonText(value: string): boolean {
+  const normalized = value.trim();
+  if (!normalized) {
+    return false;
+  }
+  return /^Unhandled stop reason:\s*[A-Za-z0-9_-]+/i.test(normalized);
 }
 
 /**
@@ -207,7 +224,7 @@ export async function handleDingTalkMessage(params: HandleDingTalkMessageParams)
       await sendBySession(
         dingtalkConfig,
         sessionWebhook,
-        `⚠️ 主动推送可能失败\n\n检测到当前用户标识为纯数字（\`${data.senderStaffId || senderId}\`）。企业内部机器人在定时/主动发送场景中，通常需要企业内部有效用户ID与完整授权。\n\n建议：\n1) 优先使用企业内部用户ID（如 managerXXXX）\n2) 确认应用已申请并获得主动发送相关权限\n3) 确认目标用户已加入机器人所属企业`,
+        "⚠️ 主动推送可能失败\n\n检测到该用户最近一次主动发送调用返回了权限或目标不可达错误。当前会话回复仍可正常使用，但定时/主动发送可能失败。\n\n建议：\n1) 在钉钉开放平台确认应用已申请并获得主动发送相关权限\n2) 确认目标用户属于当前企业并在应用可见范围内\n3) 使用相同账号进行一次主动发送验证并检查错误码详情",
         { log },
       );
     } catch (err: any) {
@@ -219,16 +236,6 @@ export async function handleDingTalkMessage(params: HandleDingTalkMessageParams)
   }
   if (senderId) {
     registerPeerId(senderId);
-  }
-
-  if (isDirect && /^\d+$/.test((data.senderStaffId || senderId || "").trim())) {
-    recordProactiveRiskObservation({
-      accountId,
-      targetId: data.senderStaffId || senderId,
-      level: "high",
-      reason: "numeric-user-id",
-      source: "webhook-hint",
-    });
   }
 
   // 2) Authorization guard (DM/group policy).
@@ -467,6 +474,11 @@ export async function handleDingTalkMessage(params: HandleDingTalkMessageParams)
             return;
           }
 
+          if (typeof textToSend === "string" && isUnhandledStopReasonText(textToSend)) {
+            log?.warn?.(`[DingTalk] Suppressed stop reason from outbound chat content: ${textToSend}`);
+            return;
+          }
+
           if (useCardMode && currentAICard && info?.kind === "final") {
             lastCardContent = textToSend;
             return;
@@ -552,12 +564,21 @@ export async function handleDingTalkMessage(params: HandleDingTalkMessageParams)
       const hasQueuedFinalString = isNonEmptyString(queuedFinal);
 
       if (hasLastCardContent || hasQueuedFinalString) {
-        const finalContent =
+        const finalContentCandidate =
           hasLastCardContent && typeof lastCardContent === "string"
             ? lastCardContent
             : typeof queuedFinal === "string"
               ? queuedFinal
               : "";
+        if (isUnhandledStopReasonText(finalContentCandidate)) {
+          log?.warn?.(
+            `[DingTalk] Suppressed stop reason from AI Card final content: ${finalContentCandidate}`,
+          );
+          currentAICard.state = AICardStatus.FINISHED;
+          currentAICard.lastUpdated = Date.now();
+          return;
+        }
+        const finalContent = finalContentCandidate;
         await finishAICard(currentAICard, finalContent, log);
       } else {
         log?.debug?.(
