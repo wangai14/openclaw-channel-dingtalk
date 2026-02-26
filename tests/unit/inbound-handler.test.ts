@@ -258,7 +258,7 @@ describe('inbound-handler', () => {
         expect(shared.sendMessageMock).toHaveBeenCalled();
     });
 
-    it('handleDingTalkMessage marks card FINISHED when no textual output is produced', async () => {
+    it('handleDingTalkMessage finalizes card with default content when no textual output is produced', async () => {
         const runtime = buildRuntime();
         runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher = vi.fn().mockResolvedValue({ queuedFinal: '' });
         shared.getRuntimeMock.mockReturnValueOnce(runtime);
@@ -284,8 +284,8 @@ describe('inbound-handler', () => {
             },
         } as any);
 
-        expect(card.state).toBe('3');
-        expect(shared.finishAICardMock).not.toHaveBeenCalled();
+        expect(shared.finishAICardMock).toHaveBeenCalledTimes(1);
+        expect(shared.finishAICardMock).toHaveBeenCalledWith(card, '✅ Done', undefined);
     });
 
     it('handleDingTalkMessage skips finishAICard when current card is already terminal', async () => {

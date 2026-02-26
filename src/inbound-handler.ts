@@ -581,11 +581,11 @@ export async function handleDingTalkMessage(params: HandleDingTalkMessageParams)
         const finalContent = finalContentCandidate;
         await finishAICard(currentAICard, finalContent, log);
       } else {
+        const defaultFinalContent = "✅ Done";
         log?.debug?.(
-          "[DingTalk] Skipping AI Card finalization because no textual content was produced.",
+          "[DingTalk] No textual content was produced; finalizing AI Card with default completion content.",
         );
-        currentAICard.state = AICardStatus.FINISHED;
-        currentAICard.lastUpdated = Date.now();
+        await finishAICard(currentAICard, defaultFinalContent, log);
       }
     } catch (err: any) {
       log?.debug?.(`[DingTalk] AI Card finalization failed: ${err.message}`);
