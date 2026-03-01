@@ -109,6 +109,9 @@ function applyAccountConfig(params: {
     ...(typeof input.maxReconnectCycles === "number"
       ? { maxReconnectCycles: input.maxReconnectCycles }
       : {}),
+    ...(typeof input.useConnectionManager === "boolean"
+      ? { useConnectionManager: input.useConnectionManager }
+      : {}),
     ...(typeof input.mediaMaxMb === "number" ? { mediaMaxMb: input.mediaMaxMb } : {}),
   };
 
