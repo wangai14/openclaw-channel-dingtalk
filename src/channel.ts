@@ -399,6 +399,10 @@ export const dingtalkPlugin: DingTalkChannelPlugin = {
 
       // Guard against duplicate stop paths (abort signal + explicit stop).
       let stopped = false;
+      let nativeStopResolve: (() => void) | undefined;
+      const nativeStopPromise = new Promise<void>((resolve) => {
+        nativeStopResolve = resolve;
+      });
       let connectionManager: ConnectionManager | undefined;
 
       const stopClient = () => {
@@ -415,6 +419,7 @@ export const dingtalkPlugin: DingTalkChannelPlugin = {
           } catch (err: any) {
             ctx.log?.warn?.(`[${account.accountId}] Error during disconnect: ${err.message}`);
           }
+          nativeStopResolve?.();
         }
 
         ctx.setStatus({
@@ -464,6 +469,7 @@ export const dingtalkPlugin: DingTalkChannelPlugin = {
               lastError: null,
             });
             ctx.log?.info?.(`[${account.accountId}] DingTalk Stream client connected successfully`);
+            await nativeStopPromise;
           }
         } catch (err: any) {
           ctx.log?.error?.(`[${account.accountId}] Failed to establish connection: ${err.message}`);
