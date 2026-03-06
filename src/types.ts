@@ -17,6 +17,7 @@ import type {
   ChannelGatewayContext as SDKChannelGatewayContext,
   ChannelPlugin as SDKChannelPlugin,
 } from "openclaw/plugin-sdk";
+import { mergeAccountWithDefaults } from "./config";
 
 export interface DingtalkPluginModule {
   id: string;
@@ -40,6 +41,7 @@ export interface DingTalkConfig extends OpenClawConfig {
   dmPolicy?: "open" | "pairing" | "allowlist";
   groupPolicy?: "open" | "allowlist";
   allowFrom?: string[];
+  mediaUrlAllowlist?: string[];
   showThinking?: boolean;
   debug?: boolean;
   messageType?: "markdown" | "card";
@@ -54,6 +56,10 @@ export interface DingTalkConfig extends OpenClawConfig {
   reconnectJitter?: number;
   /** Maximum number of runtime reconnect cycles before giving up (default: 10) */
   maxReconnectCycles?: number;
+  /** Whether to use ConnectionManager; when false, use DWClient native keepAlive+autoReconnect */
+  useConnectionManager?: boolean;
+  /** Maximum inbound media file size in MB (overrides runtime default when set) */
+  mediaMaxMb?: number;
   proactivePermissionHint?: {
     enabled?: boolean;
     cooldownHours?: number;
@@ -74,6 +80,7 @@ export interface DingTalkChannelConfig {
   dmPolicy?: "open" | "pairing" | "allowlist";
   groupPolicy?: "open" | "allowlist";
   allowFrom?: string[];
+  mediaUrlAllowlist?: string[];
   showThinking?: boolean;
   debug?: boolean;
   messageType?: "markdown" | "card";
@@ -87,6 +94,10 @@ export interface DingTalkChannelConfig {
   reconnectJitter?: number;
   /** Maximum number of runtime reconnect cycles before giving up (default: 10) */
   maxReconnectCycles?: number;
+  /** Whether to use ConnectionManager; when false, use DWClient native keepAlive+autoReconnect */
+  useConnectionManager?: boolean;
+  /** Maximum inbound media file size in MB (overrides runtime default when set) */
+  mediaMaxMb?: number;
   proactivePermissionHint?: {
     enabled?: boolean;
     cooldownHours?: number;
@@ -214,6 +225,8 @@ export interface SendMessageOptions {
   mediaUrl?: string;
   mediaType?: "image" | "voice" | "video" | "file";
   accountId?: string;
+  cardUpdateMode?: "replace" | "append" | "finalize";
+  cardFinalize?: boolean;
 }
 
 /**
@@ -442,10 +455,13 @@ export interface AICardInstance {
   cardInstanceId: string;
   accessToken: string;
   conversationId: string;
+  accountId?: string;
+  storePath?: string;
   createdAt: number;
   lastUpdated: number;
   state: AICardState; // Current card state: PROCESSING, INPUTING, FINISHED, FAILED
   config?: DingTalkConfig; // Store config reference for token refresh
+  lastStreamedContent?: string;
 }
 
 /**
@@ -567,6 +583,8 @@ export function resolveDingTalkAccount(
       maxReconnectDelay: dingtalk?.maxReconnectDelay,
       reconnectJitter: dingtalk?.reconnectJitter,
       maxReconnectCycles: dingtalk?.maxReconnectCycles,
+      useConnectionManager: dingtalk?.useConnectionManager,
+      mediaMaxMb: dingtalk?.mediaMaxMb,
       proactivePermissionHint: dingtalk?.proactivePermissionHint,
     };
     return {
@@ -576,13 +594,17 @@ export function resolveDingTalkAccount(
     };
   }
 
-  // If named account, get from accounts object
+  // If named account, merge channel-level defaults with account-level overrides
   const accountConfig = dingtalk?.accounts?.[id];
   if (accountConfig) {
+    const merged = mergeAccountWithDefaults(
+      dingtalk as DingTalkConfig,
+      accountConfig,
+    );
     return {
-      ...accountConfig,
+      ...merged,
       accountId: id,
-      configured: Boolean(accountConfig.clientId && accountConfig.clientSecret),
+      configured: Boolean(merged.clientId && merged.clientSecret),
     };
   }
 

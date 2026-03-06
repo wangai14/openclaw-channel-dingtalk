@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import axios from "axios";
 import { getAccessToken } from "./auth";
 import { stripTargetPrefix } from "./config";
@@ -8,53 +10,158 @@ import type {
   AICardInstance,
   AICardStreamingRequest,
   DingTalkConfig,
-  DingTalkInboundMessage,
   Logger,
 } from "./types";
 import { AICardStatus } from "./types";
 
 const DINGTALK_API = "https://api.dingtalk.com";
-// Card cache TTL (1 hour) for terminal states.
-const CARD_CACHE_TTL = 60 * 60 * 1000;
 // Thinking/tool stream snippets are truncated to keep card updates compact.
 const THINKING_TRUNCATE_LENGTH = 500;
+const CARD_STATE_FILE_VERSION = 1;
+const RECOVERY_FINALIZE_MESSAGE = "⚠️ 上一次回复处理中断，已自动结束。请重新发送你的问题。";
 
-// AI Card instance cache for streaming updates.
-const aiCardInstances = new Map<string, AICardInstance>();
-// accountId:conversationId -> cardInstanceId
-const activeCardsByTarget = new Map<string, string>();
+interface CreateAICardOptions {
+  accountId?: string;
+  storePath?: string;
+  persistPending?: boolean;
+}
+
+interface PendingCardRecord {
+  accountId: string;
+  cardInstanceId: string;
+  conversationId: string;
+  createdAt: number;
+  lastUpdated: number;
+  state: string;
+}
+
+interface PendingCardStateFile {
+  version: number;
+  updatedAt: number;
+  pendingCards: PendingCardRecord[];
+}
+
+function getCardStateFilePath(storePath?: string): string | null {
+  if (!storePath) {
+    return null;
+  }
+  return path.join(path.dirname(storePath), "dingtalk-active-cards.json");
+}
+
+function readPendingCardState(storePath?: string, log?: Logger): PendingCardStateFile {
+  const filePath = getCardStateFilePath(storePath);
+  if (!filePath) {
+    return { version: CARD_STATE_FILE_VERSION, updatedAt: Date.now(), pendingCards: [] };
+  }
+  try {
+    if (!fs.existsSync(filePath)) {
+      return { version: CARD_STATE_FILE_VERSION, updatedAt: Date.now(), pendingCards: [] };
+    }
+    const raw = fs.readFileSync(filePath, "utf-8");
+    if (!raw.trim()) {
+      return { version: CARD_STATE_FILE_VERSION, updatedAt: Date.now(), pendingCards: [] };
+    }
+    const parsed = JSON.parse(raw) as Partial<PendingCardStateFile>;
+    const records = Array.isArray(parsed.pendingCards) ? parsed.pendingCards : [];
+    return {
+      version:
+        typeof parsed.version === "number" ? parsed.version : CARD_STATE_FILE_VERSION,
+      updatedAt:
+        typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
+      pendingCards: records.filter(
+        (entry): entry is PendingCardRecord =>
+          Boolean(
+            entry &&
+              typeof entry.accountId === "string" &&
+              typeof entry.cardInstanceId === "string" &&
+              typeof entry.conversationId === "string",
+          ),
+      ),
+    };
+  } catch (err: any) {
+    log?.warn?.(`[DingTalk][AICard] Failed to read pending card state: ${err.message}`);
+    return { version: CARD_STATE_FILE_VERSION, updatedAt: Date.now(), pendingCards: [] };
+  }
+}
+
+function writePendingCardState(state: PendingCardStateFile, storePath?: string, log?: Logger): void {
+  const filePath = getCardStateFilePath(storePath);
+  if (!filePath) {
+    return;
+  }
+  try {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+    fs.writeFileSync(tempPath, JSON.stringify(state, null, 2));
+    fs.renameSync(tempPath, filePath);
+  } catch (err: any) {
+    log?.warn?.(`[DingTalk][AICard] Failed to write pending card state: ${err.message}`);
+  }
+}
+
+function upsertPendingCard(card: AICardInstance, storePath?: string, log?: Logger): void {
+  if (!card.accountId || !storePath) {
+    return;
+  }
+  const state = readPendingCardState(storePath, log);
+  const next: PendingCardRecord = {
+    accountId: card.accountId,
+    cardInstanceId: card.cardInstanceId,
+    conversationId: card.conversationId,
+    createdAt: card.createdAt,
+    lastUpdated: card.lastUpdated,
+    state: card.state,
+  };
+  const index = state.pendingCards.findIndex((item) => item.cardInstanceId === card.cardInstanceId);
+  if (index >= 0) {
+    state.pendingCards[index] = next;
+  } else {
+    state.pendingCards.push(next);
+  }
+  state.updatedAt = Date.now();
+  writePendingCardState(state, storePath, log);
+}
+
+function removePendingCard(card: AICardInstance, log?: Logger): void {
+  if (!card.accountId || !card.storePath) {
+    return;
+  }
+  removePendingCardById(card.cardInstanceId, card.storePath, log);
+}
+
+function removePendingCardById(cardInstanceId: string, storePath?: string, log?: Logger): void {
+  if (!storePath) {
+    return;
+  }
+  const state = readPendingCardState(storePath, log);
+  const remaining = state.pendingCards.filter((item) => item.cardInstanceId !== cardInstanceId);
+  if (remaining.length === state.pendingCards.length) {
+    return;
+  }
+  state.pendingCards = remaining;
+  state.updatedAt = Date.now();
+  writePendingCardState(state, storePath, log);
+}
+
+function listPendingCardsByAccount(
+  accountId: string,
+  storePath?: string,
+  log?: Logger,
+): PendingCardRecord[] {
+  const state = readPendingCardState(storePath, log);
+  return state.pendingCards.filter((item) => item.accountId === accountId);
+}
+
+function normalizeRecoveredState(state: string): AICardInstance["state"] {
+  if (state === AICardStatus.PROCESSING || state === AICardStatus.INPUTING) {
+    return state;
+  }
+  return AICardStatus.PROCESSING;
+}
 
 // Helper to identify card terminal states.
 export function isCardInTerminalState(state: string): boolean {
   return state === AICardStatus.FINISHED || state === AICardStatus.FAILED;
-}
-
-export function getCardById(cardId: string): AICardInstance | undefined {
-  return aiCardInstances.get(cardId);
-}
-
-export function getActiveCardIdByTarget(targetKey: string): string | undefined {
-  return activeCardsByTarget.get(targetKey);
-}
-
-export function deleteActiveCardByTarget(targetKey: string): void {
-  activeCardsByTarget.delete(targetKey);
-}
-
-export function cleanupCardCache(): void {
-  const now = Date.now();
-  // Clean terminal cards only; active cards stay in cache to support streaming continuity.
-  for (const [cardInstanceId, instance] of aiCardInstances.entries()) {
-    if (isCardInTerminalState(instance.state) && now - instance.lastUpdated > CARD_CACHE_TTL) {
-      aiCardInstances.delete(cardInstanceId);
-      for (const [targetKey, mappedCardId] of activeCardsByTarget.entries()) {
-        if (mappedCardId === cardInstanceId) {
-          activeCardsByTarget.delete(targetKey);
-          break;
-        }
-      }
-    }
-  }
 }
 
 export function formatContentForCard(content: string, type: "thinking" | "tool"): string {
@@ -122,22 +229,124 @@ async function sendTemplateMismatchNotification(
   }
 }
 
+/**
+ * Send a proactive text message via card API (createAndDeliver + immediate finalize).
+ * Used in card mode to replace oToMessages/batchSend for single-chat users.
+ */
+export async function sendProactiveCardText(
+  config: DingTalkConfig,
+  conversationId: string,
+  content: string,
+  log?: Logger,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const card = await createAICard(config, conversationId, log, { persistPending: false });
+    if (!card) {
+      return { ok: false, error: "Failed to create AI card" };
+    }
+    await finishAICard(card, content, log);
+    return { ok: true };
+  } catch (err: any) {
+    log?.error?.(`[DingTalk][AICard] Proactive card send failed: ${err.message}`);
+    return { ok: false, error: err.message };
+  }
+}
+
+export async function recoverPendingCardsForAccount(
+  config: DingTalkConfig,
+  accountId: string,
+  storePath?: string,
+  log?: Logger,
+): Promise<number> {
+  return finalizePendingCardsByAccount(
+    config,
+    accountId,
+    RECOVERY_FINALIZE_MESSAGE,
+    storePath,
+    "recover",
+    log,
+  );
+}
+
+export async function finalizeActiveCardsForAccount(
+  config: DingTalkConfig,
+  accountId: string,
+  reason: string,
+  storePath?: string,
+  log?: Logger,
+): Promise<number> {
+  return finalizePendingCardsByAccount(config, accountId, reason, storePath, "finalize", log);
+}
+
+async function finalizePendingCardsByAccount(
+  config: DingTalkConfig,
+  accountId: string,
+  reason: string,
+  storePath: string | undefined,
+  mode: "recover" | "finalize",
+  log?: Logger,
+): Promise<number> {
+  if (!storePath) {
+    return 0;
+  }
+
+  const pendingCards = listPendingCardsByAccount(accountId, storePath, log).filter(
+    (item) => !isCardInTerminalState(item.state),
+  );
+  if (pendingCards.length === 0) {
+    return 0;
+  }
+
+  let token = "";
+  try {
+    token = await getAccessToken(config, log);
+  } catch (err: any) {
+    const tokenFailureScope =
+      mode === "recover"
+        ? "pending card recovery"
+        : "finalizing active cards";
+    log?.warn?.(`[DingTalk][AICard] Failed to fetch token for ${tokenFailureScope}: ${err.message}`);
+    return 0;
+  }
+
+  let finalizedCount = 0;
+  for (const entry of pendingCards) {
+    const card: AICardInstance = {
+      cardInstanceId: entry.cardInstanceId,
+      accessToken: token,
+      conversationId: entry.conversationId,
+      accountId: entry.accountId,
+      storePath,
+      createdAt: entry.createdAt || Date.now(),
+      lastUpdated: entry.lastUpdated || Date.now(),
+      state: normalizeRecoveredState(entry.state),
+      config,
+    };
+    try {
+      await finishAICard(card, reason, log);
+      finalizedCount += 1;
+    } catch (err: any) {
+      const action = mode === "recover" ? "recover" : "finalize";
+      log?.warn?.(`[DingTalk][AICard] Failed to ${action} active card ${entry.cardInstanceId}: ${err.message}`);
+      removePendingCardById(entry.cardInstanceId, storePath, log);
+    }
+  }
+  return finalizedCount;
+}
+
 export async function createAICard(
   config: DingTalkConfig,
   conversationId: string,
-  data: DingTalkInboundMessage,
-  accountId: string,
   log?: Logger,
+  options: CreateAICardOptions = {},
 ): Promise<AICardInstance | null> {
   try {
+    const shouldPersistPending = options.persistPending ?? Boolean(options.accountId && options.storePath);
     const token = await getAccessToken(config, log);
     // Use randomUUID to avoid collisions across workers/restarts.
     const cardInstanceId = `card_${randomUUID()}`;
 
     log?.info?.(`[DingTalk][AICard] Creating and delivering card outTrackId=${cardInstanceId}`);
-    log?.debug?.(
-      `[DingTalk][AICard] conversationType=${data.conversationType}, conversationId=${conversationId}`,
-    );
 
     const isGroup = conversationId.startsWith("cid");
 
@@ -146,11 +355,12 @@ export async function createAICard(
     }
 
     // DingTalk createAndDeliver API payload.
+    const cardTemplateKey = config.cardTemplateKey || "content";
     const createAndDeliverBody = {
       cardTemplateId: config.cardTemplateId,
       outTrackId: cardInstanceId,
       cardData: {
-        cardParamMap: {},
+        cardParamMap: { [cardTemplateKey]: "" },
       },
       callbackType: "STREAM",
       imGroupOpenSpaceModel: { supportForward: true },
@@ -162,7 +372,9 @@ export async function createAICard(
       imGroupOpenDeliverModel: isGroup
         ? { robotCode: config.robotCode || config.clientId }
         : undefined,
-      imRobotOpenDeliverModel: !isGroup ? { spaceType: "IM_ROBOT" } : undefined,
+      imRobotOpenDeliverModel: !isGroup
+        ? { spaceType: "IM_ROBOT", robotCode: config.robotCode || config.clientId }
+        : undefined,
     };
 
     if (isGroup && !config.robotCode) {
@@ -186,23 +398,21 @@ export async function createAICard(
       `[DingTalk][AICard] CreateAndDeliver response: status=${resp.status} data=${JSON.stringify(resp.data)}`,
     );
 
-    // Cache the AI card instance with config reference for token refresh/recovery.
+    // Return the AI card instance with config reference for token refresh/recovery.
     const aiCardInstance: AICardInstance = {
       cardInstanceId,
       accessToken: token,
       conversationId,
+      accountId: options.accountId,
+      storePath: options.storePath,
       createdAt: Date.now(),
       lastUpdated: Date.now(),
       state: AICardStatus.PROCESSING,
       config,
     };
-    aiCardInstances.set(cardInstanceId, aiCardInstance);
-
-    const targetKey = `${accountId}:${conversationId}`;
-    activeCardsByTarget.set(targetKey, cardInstanceId);
-    log?.debug?.(
-      `[DingTalk][AICard] Registered active card mapping: ${targetKey} -> ${cardInstanceId}`,
-    );
+    if (shouldPersistPending) {
+      upsertPendingCard(aiCardInstance, options.storePath, log);
+    }
 
     return aiCardInstance;
   } catch (err: any) {
@@ -274,8 +484,10 @@ export async function streamAICard(
     );
 
     card.lastUpdated = Date.now();
+    card.lastStreamedContent = content;
     if (finished) {
       card.state = AICardStatus.FINISHED;
+      removePendingCard(card, log);
     } else if (card.state === AICardStatus.PROCESSING) {
       card.state = AICardStatus.INPUTING;
     }
@@ -300,6 +512,7 @@ export async function streamAICard(
 
       card.state = AICardStatus.FAILED;
       card.lastUpdated = Date.now();
+      removePendingCard(card, log);
       await sendTemplateMismatchNotification(card, errorMsg, log);
       throw err;
     }
@@ -319,8 +532,10 @@ export async function streamAICard(
           `[DingTalk][AICard] Retry after token refresh succeeded: status=${retryResp.status}`,
         );
         card.lastUpdated = Date.now();
+        card.lastStreamedContent = content;
         if (finished) {
           card.state = AICardStatus.FINISHED;
+          removePendingCard(card, log);
         } else if (card.state === AICardStatus.PROCESSING) {
           card.state = AICardStatus.INPUTING;
         }
@@ -341,6 +556,7 @@ export async function streamAICard(
 
     card.state = AICardStatus.FAILED;
     card.lastUpdated = Date.now();
+    removePendingCard(card, log);
     log?.error?.(
       `[DingTalk][AICard] Streaming update failed: ${err.message}`,
     );
