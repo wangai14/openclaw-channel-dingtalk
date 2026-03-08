@@ -81,7 +81,7 @@ describe('card-service', () => {
         expect(mockedAxios.post).toHaveBeenCalledTimes(1);
         const body = mockedAxios.post.mock.calls[0]?.[1];
         expect(body.cardData?.cardParamMap).toEqual({
-            config: '{"autoLayout":true}',
+            config: '{"autoLayout":true,"enableForward":true}',
             content: '',
         });
         expect(body.imGroupOpenDeliverModel).toEqual({ robotCode: 'id' });

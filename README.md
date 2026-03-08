@@ -282,7 +282,7 @@ openclaw configure --section channels
 
 - 仓库内已提供可直接导入的模板文件：`docs/cardTemplate.json`
 - 当前模板的正文变量名为 `content`；如果您后续自行修改模板字段，请同步更新 `cardTemplateKey`
-- 插件在 `messageType: 'card'` 下会默认传入 `config={"autoLayout":true}` 以启用 PC 端宽屏布局；如果您使用自定义模板，请额外定义对象变量 `config`，并在其中添加布尔子属性 `autoLayout`
+- 插件在 `messageType: 'card'` 下会默认传入 `config={"autoLayout":true,"enableForward":true}`；其中 `autoLayout` 用于启用 PC 端宽屏布局，`enableForward` 用于启用卡片转发。如果您使用自定义模板，请额外定义对象变量 `config`，并在其中添加布尔子属性 `autoLayout` 和 `enableForward`
 
 ##### 4. 获取凭证
 
@@ -577,7 +577,7 @@ openclaw gateway restart
 2. 使用 `/v1.0/card/streaming` 实现真正的流式更新
 3. 自动状态管理（PROCESSING → INPUTING → FINISHED）
 4. 更稳定的流式体验，无需手动节流
-5. 默认注入 `cardData.cardParamMap.config={"autoLayout":true}`，启用 AI 卡片在 PC 端的宽屏自适应布局
+5. 默认注入 `cardData.cardParamMap.config={"autoLayout":true,"enableForward":true}`，同时启用 AI 卡片在 PC 端的宽屏自适应布局和卡片转发
 
 **AI Card 持久化与恢复机制（v3.2.x）：**
 
