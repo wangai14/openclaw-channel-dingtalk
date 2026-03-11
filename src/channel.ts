@@ -203,6 +203,9 @@ const dingtalkMessageActions: ChannelMessageActionAdapter = {
       throw new Error(`Action ${action} is not supported for provider dingtalk.`);
     }
 
+    const log = getLogger();
+    const config = getConfig(cfg, accountId ?? undefined);
+
     const to = pluginSdk.readStringParam(params, "to", { required: true });
     const mediaInput =
       pluginSdk.readStringParam(params, "media", { trim: false }) ??
@@ -236,9 +239,6 @@ const dingtalkMessageActions: ChannelMessageActionAdapter = {
         asVoice,
       });
     }
-
-    const log = getLogger();
-    const config = getConfig(cfg, accountId ?? undefined);
 
     if (hasMedia && mediaInput) {
       const mediaPath = resolveRelativePath(mediaInput);
