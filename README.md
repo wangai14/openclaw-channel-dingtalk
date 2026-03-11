@@ -371,10 +371,6 @@ openclaw gateway restart
 | `initialReconnectDelay` | number   | `1000`       | 初始重连延迟（毫秒）                        |
 | `maxReconnectDelay`     | number   | `60000`      | 最大重连延迟（毫秒）                        |
 | `reconnectJitter`       | number   | `0.3`        | 重连延迟抖动因子（0-1）                     |
-| `bypassProxyForSend`    | boolean  | `false`      | 仅对 send/card/upload 出站请求绕过系统 HTTP(S) 代理 |
-| `learningEnabled`       | boolean  | `false`      | 启用本地学习闭环（事件、反思、会话笔记、全局规则） |
-| `learningAutoApply`     | boolean  | `false`      | 是否将反思自动注入会话/全局规则；默认只采集不生效 |
-| `learningNoteTtlMs`     | number   | `21600000`   | 会话级学习笔记有效期（毫秒，默认 6 小时） |
 
 ### `thinkingMessage` 彩蛋（`emoji`）
 
