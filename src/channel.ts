@@ -142,6 +142,7 @@ const inboundCountersByAccount = new Map<
   }
 >();
 const INBOUND_COUNTER_LOG_EVERY = 10;
+const DEFAULT_ASYNC_ACK_TEXT = "已收到，正在处理中，稍后回复。";
 
 function getInboundCounters(accountId: string) {
   const existing = inboundCountersByAccount.get(accountId);
@@ -166,6 +167,23 @@ function logInboundCounters(log: any, accountId: string, reason: string): void {
   log?.info?.(
     `[${accountId}] Inbound counters (${reason}): received=${stats.received}, acked=${stats.acked}, processed=${stats.processed}, dedupSkipped=${stats.dedupSkipped}, inflightSkipped=${stats.inflightSkipped}, failed=${stats.failed}, noMessageId=${stats.noMessageId}`,
   );
+}
+
+function shouldHandleAsync(data: DingTalkInboundMessage, config: DingTalkConfig): boolean {
+  if (!config.asyncMode || !data.sessionWebhook) {
+    return false;
+  }
+  if (data.msgtype !== "text") {
+    return false;
+  }
+  const text = data.text?.content?.trim();
+  if (!text) {
+    return false;
+  }
+  if (text.startsWith("/")) {
+    return false;
+  }
+  return true;
 }
 
 function readBooleanLikeParam(params: Record<string, unknown>, key: string): boolean | undefined {
@@ -644,6 +662,7 @@ export const dingtalkPlugin: DingTalkChannelPlugin = {
 
             const inflightSince = processingDedupKeys.get(dedupKey);
             if (inflightSince !== undefined) {
+              const asyncMode = shouldHandleAsync(data, config);
               if (Date.now() - inflightSince > INFLIGHT_TTL_MS) {
                 ctx.log?.warn?.(
                   `[${account.accountId}] Releasing stale in-flight lock for ${dedupKey} (held ${Date.now() - inflightSince}ms > TTL ${INFLIGHT_TTL_MS}ms)`,
@@ -654,13 +673,74 @@ export const dingtalkPlugin: DingTalkChannelPlugin = {
                   `[${account.accountId}] Skipping in-flight duplicate message: ${dedupKey}`,
                 );
                 stats.inflightSkipped += 1;
+                if (asyncMode) {
+                  // Async mode already acknowledged the original callback, so duplicates should
+                  // also be acknowledged to avoid pointless server retries during background work.
+                  acknowledge();
+                }
                 logInboundCounters(ctx.log, account.accountId, "inflight-skipped");
                 return;
               }
             }
 
             processingDedupKeys.set(dedupKey, Date.now());
+            let releaseInOuterFinally = true;
             try {
+              const asyncMode = shouldHandleAsync(data, config);
+              if (asyncMode) {
+                releaseInOuterFinally = false;
+                const ackText = (config.asyncAckText || "").trim() || DEFAULT_ASYNC_ACK_TEXT;
+                try {
+                  await sendBySession(config, data.sessionWebhook, ackText, { log: ctx.log });
+                } catch (ackTextError: any) {
+                  ctx.log?.warn?.(
+                    `[${account.accountId}] Failed to send async ack text for ${dedupKey}: ${ackTextError.message}`,
+                  );
+                }
+
+                acknowledge();
+                void handleDingTalkMessage({
+                  cfg,
+                  accountId: account.accountId,
+                  data,
+                  sessionWebhook: data.sessionWebhook,
+                  log: ctx.log,
+                  dingtalkConfig: {
+                    ...config,
+                    // Async ack should stay on a single reply channel: immediate session ack
+                    // plus background markdown reply. Card streaming in the background would
+                    // conflict with the already-sent async acknowledgement.
+                    messageType: "markdown",
+                    showThinking: false,
+                  },
+                })
+                  .then(() => {
+                    stats.processed += 1;
+                    markMessageProcessed(dedupKey);
+                    if (stats.received % INBOUND_COUNTER_LOG_EVERY === 0) {
+                      logInboundCounters(ctx.log, account.accountId, "periodic");
+                    }
+                  })
+                  .catch((error: any) => {
+                    stats.failed += 1;
+                    logInboundCounters(ctx.log, account.accountId, "failed");
+                    ctx.log?.error?.(
+                      `[${account.accountId}] Error processing async message: ${error.message}`,
+                    );
+                    return sendAsyncFailureNotice(
+                      config,
+                      data,
+                      ctx.log,
+                      account.accountId,
+                      dedupKey,
+                    );
+                  })
+                  .finally(() => {
+                    processingDedupKeys.delete(dedupKey);
+                  });
+                return;
+              }
+
               await handleDingTalkMessage({
                 cfg,
                 accountId: account.accountId,
@@ -676,7 +756,9 @@ export const dingtalkPlugin: DingTalkChannelPlugin = {
                 logInboundCounters(ctx.log, account.accountId, "periodic");
               }
             } finally {
-              processingDedupKeys.delete(dedupKey);
+              if (releaseInOuterFinally) {
+                processingDedupKeys.delete(dedupKey);
+              }
             }
           } catch (error: any) {
             stats.failed += 1;
