@@ -25,6 +25,7 @@ import { DingTalkConfigSchema } from "./config-schema.js";
 import { ConnectionManager } from "./connection-manager";
 import { isMessageProcessed, markMessageProcessed } from "./dedup";
 import { handleDingTalkMessage } from "./inbound-handler";
+import { parseLearnCommand } from "./learning-command-service";
 import { getLogger } from "./logger-context";
 import { prepareMediaInput, resolveOutboundMediaType } from "./media-utils";
 import { dingtalkOnboardingAdapter } from "./onboarding.js";
@@ -183,6 +184,12 @@ function shouldHandleAsync(data: DingTalkInboundMessage, config: DingTalkConfig)
     return false;
   }
   if (text.startsWith("/")) {
+    return false;
+  }
+  // Reuse control-command parsing so non-slash owner helpers like "我是谁" or
+  // "这里是谁" keep their existing synchronous semantics instead of being
+  // acknowledged as async free-form chat.
+  if (parseLearnCommand(text).scope !== "unknown") {
     return false;
   }
   return true;

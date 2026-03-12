@@ -258,6 +258,54 @@ describe('gateway inbound callback pipeline', () => {
         );
     });
 
+    it('keeps non-slash control aliases on the synchronous path even when asyncMode is enabled', async () => {
+        shared.isMessageProcessedMock.mockReturnValue(false);
+        shared.handleDingTalkMessageMock.mockResolvedValueOnce(undefined);
+        const ctx = createStartContext();
+        ctx.account.config.asyncMode = true;
+        ctx.account.config.asyncAckText = '收到，后台处理中';
+
+        await startGatewayAccount(ctx as any);
+
+        await shared.listeners.TOPIC_ROBOT?.({
+            headers: { messageId: 'stream_msg_async_control_alias' },
+            data: JSON.stringify({
+                msgId: 'msg_async_control_alias',
+                msgtype: 'text',
+                text: { content: '我是谁' },
+                conversationType: '1',
+                conversationId: 'cidA1B2C3',
+                senderId: 'user_1',
+                chatbotUserId: 'bot_1',
+                sessionWebhook: 'https://webhook',
+            }),
+        });
+
+        expect(shared.sendBySessionMock).not.toHaveBeenCalledWith(
+            expect.anything(),
+            'https://webhook',
+            '收到，后台处理中',
+            expect.anything(),
+        );
+        expect(shared.handleDingTalkMessageMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                dingtalkConfig: expect.objectContaining({
+                    asyncMode: true,
+                }),
+            }),
+        );
+        expect(shared.handleDingTalkMessageMock).not.toHaveBeenCalledWith(
+            expect.objectContaining({
+                dingtalkConfig: expect.objectContaining({
+                    messageType: 'markdown',
+                    showThinking: false,
+                }),
+            }),
+        );
+        expect(shared.markMessageProcessedMock).toHaveBeenCalledWith('robot_1:msg_async_control_alias');
+        expect(shared.socketCallBackResponseMock).toHaveBeenCalledWith('stream_msg_async_control_alias', { success: true });
+    });
+
     it('sends failure notice when async background processing fails after early ack', async () => {
         shared.isMessageProcessedMock.mockReturnValue(false);
         shared.handleDingTalkMessageMock.mockRejectedValueOnce(new Error('async failure'));
