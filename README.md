@@ -426,6 +426,7 @@ openclaw gateway restart
 - `dingtalk.docs.create` 支持可选的 `parentId`，未传时默认在 space 根目录创建。
 - `dingtalk.docs.append` 使用钉钉 block API 的 `index = -1` 语义，将新段落追加到文档末尾。
 - `dingtalk.docs.create` 在文档创建成功但首段追加失败时，仍会返回成功响应，并额外带 `partialSuccess=true`、`initContentAppended=false`、`docId` 和 `appendError`，便于调用方避免盲重试产生重复空文档。
+- 调用方处理 `dingtalk.docs.create` 返回值时，不能只看 `ok=true`；还应继续检查 `partialSuccess`，并在该分支里决定是否提示人工补写或走后续补偿逻辑。
 
 示例：
 
