@@ -52,16 +52,13 @@ export class ConnectionManager {
   private static readonly DEFAULT_MAX_RECONNECT_CYCLES = 10;
   private static readonly MAX_CYCLE_BACKOFF_MS = 5000;
   private static readonly MAX_CONSECUTIVE_DEADLINE_TIMEOUTS = 5;
-  private static readonly SOCKET_IDLE_TIMEOUT_MS = 60_000;
   private runtimeReconnectCycles: number = 0;
   private reconnectDeadline?: number;
   private consecutiveDeadlineTimeouts: number = 0;
-  private lastSocketActivityAt?: number;
   private runtimeCounters = {
     healthUnhealthyChecks: 0,
     healthTriggeredReconnects: 0,
     serverDisconnectMessages: 0,
-    socketIdleReconnects: 0,
     socketCloseEvents: 0,
     runtimeDisconnects: 0,
     reconnectAttempts: 0,
@@ -74,7 +71,6 @@ export class ConnectionManager {
   private socketCloseHandler?: (code: number, reason: string) => void;
   private socketErrorHandler?: (error: Error) => void;
   private socketMessageHandler?: (data: any) => void;
-  private socketPongHandler?: () => void;
   private monitoredSocket?: any;
 
   // Sleep abort control
@@ -107,22 +103,10 @@ export class ConnectionManager {
     }
   }
 
-  private isSocketIdleDetectionEnabled(): boolean {
-    const clientAny = this.client as any;
-    const configKeepAlive = clientAny.config?.keepAlive;
-    if (typeof configKeepAlive === "boolean") {
-      return configKeepAlive;
-    }
-    if (typeof clientAny.getConfig === "function") {
-      return clientAny.getConfig()?.keepAlive === true;
-    }
-    return false;
-  }
-
   private logRuntimeCounters(reason: string): void {
     const c = this.runtimeCounters;
     this.log?.info?.(
-      `[${this.accountId}] Runtime counters (${reason}): healthUnhealthyChecks=${c.healthUnhealthyChecks}, healthTriggeredReconnects=${c.healthTriggeredReconnects}, serverDisconnectMessages=${c.serverDisconnectMessages}, socketIdleReconnects=${c.socketIdleReconnects}, socketCloseEvents=${c.socketCloseEvents}, runtimeDisconnects=${c.runtimeDisconnects}, reconnectAttempts=${c.reconnectAttempts}, reconnectSuccess=${c.reconnectSuccess}, reconnectFailures=${c.reconnectFailures}`,
+      `[${this.accountId}] Runtime counters (${reason}): healthUnhealthyChecks=${c.healthUnhealthyChecks}, healthTriggeredReconnects=${c.healthTriggeredReconnects}, serverDisconnectMessages=${c.serverDisconnectMessages}, socketCloseEvents=${c.socketCloseEvents}, runtimeDisconnects=${c.runtimeDisconnects}, reconnectAttempts=${c.reconnectAttempts}, reconnectSuccess=${c.reconnectSuccess}, reconnectFailures=${c.reconnectFailures}`,
     );
   }
 
@@ -273,7 +257,6 @@ export class ConnectionManager {
 
       this.state = ConnectionStateEnum.CONNECTED;
       this.connectedAt = Date.now();
-      this.lastSocketActivityAt = Date.now();
       this.reconnectDeadline = undefined;
       this.consecutiveUnhealthyChecks = 0;
       this.notifyStateChange();
@@ -420,34 +403,6 @@ export class ConnectionManager {
       const socketOpen = socketReadyState === 1;
       const registered = client.registered as boolean | undefined;
 
-      // Socket idle detection: if the WebSocket hasn't received ANY frame
-      // (including SDK heartbeat replies) for SOCKET_IDLE_TIMEOUT_MS, the
-      // server likely stopped routing to this connection without sending a
-      // disconnect message. This catches the "phantom healthy" zombie state
-      // where connected=true and socket is open but nothing is delivered.
-      const socketIdleTimeoutMs = this.isSocketIdleDetectionEnabled()
-        ? ConnectionManager.SOCKET_IDLE_TIMEOUT_MS
-        : undefined;
-      const idleMs = this.lastSocketActivityAt !== undefined
-        ? now - this.lastSocketActivityAt
-        : undefined;
-      const socketIdle = socketIdleTimeoutMs !== undefined
-        && idleMs !== undefined
-        && idleMs >= socketIdleTimeoutMs;
-
-      if (socketIdle) {
-        this.log?.warn?.(
-          `[${this.accountId}] Socket idle for ${(idleMs / 1000).toFixed(1)}s (threshold ${(socketIdleTimeoutMs / 1000).toFixed(1)}s), treating as zombie connection`,
-        );
-        this.runtimeCounters.socketIdleReconnects += 1;
-        this.logRuntimeCounters("socket-idle-reconnect");
-        if (this.healthCheckInterval) {
-          clearInterval(this.healthCheckInterval);
-        }
-        this.handleRuntimeDisconnection();
-        return;
-      }
-
       // Unhealthy if:
       // 1. Not connected AND socket not open (full disconnect)
       // 2. Socket is open, client.connected is false, AND not registered
@@ -532,7 +487,6 @@ export class ConnectionManager {
       // reconnecting immediately instead of waiting for the health check or
       // the eventual TCP close.
       this.socketMessageHandler = (data: any) => {
-        this.lastSocketActivityAt = Date.now();
         try {
           const msg = JSON.parse(typeof data === "string" ? data : data.toString());
           if (msg?.type === "SYSTEM" && msg?.headers?.topic === "disconnect") {
@@ -551,11 +505,6 @@ export class ConnectionManager {
         }
       };
       socket.on("message", this.socketMessageHandler);
-
-      this.socketPongHandler = () => {
-        this.lastSocketActivityAt = Date.now();
-      };
-      socket.on("pong", this.socketPongHandler);
     }
   }
 
@@ -611,10 +560,6 @@ export class ConnectionManager {
         socket.removeListener("message", this.socketMessageHandler);
         this.socketMessageHandler = undefined;
       }
-      if (this.socketPongHandler) {
-        socket.removeListener("pong", this.socketPongHandler);
-        this.socketPongHandler = undefined;
-      }
 
       this.log?.debug?.(`[${this.accountId}] Socket event listeners removed from monitored socket`);
       this.monitoredSocket = undefined;
@@ -639,7 +584,6 @@ export class ConnectionManager {
     this.notifyStateChange("Runtime disconnection detected");
     this.attemptCount = 0;
     this.connectedAt = undefined;
-    this.lastSocketActivityAt = undefined;
     this.consecutiveUnhealthyChecks = 0;
 
     const deadlineMs = this.config.reconnectDeadlineMs ?? 50000;
