@@ -903,6 +903,7 @@ export async function handleDingTalkMessage(params: HandleDingTalkMessageParams)
       const aiCard = await createAICard(dingtalkConfig, to, log, {
         accountId,
         storePath: accountStorePath,
+        contextConversationId: groupId,
       });
       if (aiCard) {
         currentAICard = aiCard;

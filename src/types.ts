@@ -573,6 +573,7 @@ export interface AICardInstance {
   processQueryKey?: string;
   accessToken: string;
   conversationId: string;
+  contextConversationId?: string;
   accountId?: string;
   storePath?: string;
   createdAt: number;

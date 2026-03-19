@@ -199,6 +199,7 @@ interface CreateAICardOptions {
   accountId?: string;
   storePath?: string;
   persistPending?: boolean;
+  contextConversationId?: string;
 }
 
 interface PendingCardRecord {
@@ -652,6 +653,7 @@ export async function createAICard(
       cardInstanceId: resolvedCardInstanceId,
       accessToken: token,
       conversationId,
+      contextConversationId: options.contextConversationId || conversationId,
       accountId,
       storePath: options.storePath,
       createdAt: Date.now(),
@@ -848,7 +850,7 @@ export async function finishAICard(
   if (card.conversationId && content.trim() && card.accountId && card.processQueryKey) {
     cacheCardContentByProcessQueryKey(
       card.accountId,
-      card.conversationId,
+      card.contextConversationId || card.conversationId,
       card.processQueryKey,
       content,
       card.storePath,
