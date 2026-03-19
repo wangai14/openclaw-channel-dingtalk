@@ -531,6 +531,7 @@ function upsertRecord(
   }
   const existing = state.records[canonicalMsgId];
   const expiresAt = computeExpiresAt(nowMs, params.ttlMs, params.ttlReferenceMs);
+  const normalizedQuotedRef = normalizeQuotedRef(params.quotedRef);
   state.records[canonicalMsgId] = {
     msgId: canonicalMsgId,
     direction: params.direction,
@@ -545,7 +546,7 @@ function upsertRecord(
         : Math.max(expiresAt, existing?.expiresAt ?? 0),
     messageType: params.messageType || existing?.messageType,
     text: mergeText(existing?.text, params.text),
-    quotedRef: mergeQuotedRef(existing?.quotedRef, params.quotedRef),
+    quotedRef: mergeQuotedRef(existing?.quotedRef, normalizedQuotedRef),
     media: mergeMedia(existing?.media, params.media),
     delivery: mergeDelivery(existing?.delivery, params.delivery),
   };

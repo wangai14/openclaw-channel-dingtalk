@@ -47,7 +47,7 @@ export function buildInboundQuotedRef(
         fallbackCreatedAt,
       };
     }
-    if (!fallbackCreatedAt && !repliedMsgId) {
+    if (!fallbackCreatedAt) {
       return undefined;
     }
     return {
