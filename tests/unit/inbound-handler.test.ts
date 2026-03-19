@@ -1489,7 +1489,7 @@ describe("inbound-handler", () => {
     );
   });
 
-  it("resolves originalMsgId via quote journal and prepends recovered quoted text", async () => {
+  it("records inbound quotedRef for text replies without injecting quoted text", async () => {
     const runtime = buildRuntime();
     runtime.channel.session.resolveStorePath = vi
       .fn()
@@ -1497,19 +1497,12 @@ describe("inbound-handler", () => {
       .mockReturnValueOnce("/tmp/dm-agent-store.json");
     shared.getRuntimeMock.mockReturnValueOnce(runtime);
     shared.extractMessageContentMock.mockReturnValueOnce({
-      text: "[这是一条引用消息，原消息ID: orig_msg_001]\n\nhello",
+      text: "hello",
       messageType: "text",
+      quoted: {
+        msgId: "orig_msg_001",
+      },
     });
-    mockedResolveByMsgId.mockReturnValueOnce({
-      msgId: "orig_msg_001",
-      direction: "inbound",
-      topic: null,
-      accountId: "main",
-      conversationId: "cid_ok",
-      text: "历史原文",
-      createdAt: Date.now() - 1000,
-      updatedAt: Date.now(),
-    } as any);
 
     await handleDingTalkMessage({
       cfg: {},
@@ -1531,17 +1524,81 @@ describe("inbound-handler", () => {
       },
     } as any);
 
-    expect(mockedResolveByMsgId).toHaveBeenCalledWith(
+    expect(mockedUpsertInboundMessageContext).toHaveBeenCalledWith(
       expect.objectContaining({
         storePath: "/tmp/dm-account-store.json",
-        accountId: "main",
-        conversationId: "cid_ok",
-        msgId: "orig_msg_001",
+        msgId: "m_quote_1",
+        text: "hello",
+        quotedRef: {
+          targetDirection: "inbound",
+          key: "msgId",
+          value: "orig_msg_001",
+        },
       }),
     );
+    expect(runtime.channel.reply.finalizeInboundContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        RawBody: "hello",
+        CommandBody: "hello",
+        QuotedRef: {
+          targetDirection: "inbound",
+          key: "msgId",
+          value: "orig_msg_001",
+        },
+        QuotedRefJson:
+          '{"targetDirection":"inbound","key":"msgId","value":"orig_msg_001"}',
+      }),
+    );
+  });
 
-    const envelopeArg = (runtime.channel.reply.formatInboundEnvelope as any).mock.calls[0]?.[0];
-    expect(envelopeArg.body).toContain('[引用消息: "历史原文"]');
+  it("logs legacy quoteContent when no resolvable quotedRef can be built", async () => {
+    const runtime = buildRuntime();
+    runtime.channel.session.resolveStorePath = vi
+      .fn()
+      .mockReturnValueOnce("/tmp/dm-account-store.json")
+      .mockReturnValueOnce("/tmp/dm-agent-store.json");
+    const log = {
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+    };
+    shared.getRuntimeMock.mockReturnValueOnce(runtime);
+    shared.extractMessageContentMock.mockReturnValueOnce({
+      text: "当前消息",
+      messageType: "text",
+    });
+
+    await handleDingTalkMessage({
+      cfg: {},
+      accountId: "main",
+      sessionWebhook: "https://session.webhook",
+      log,
+      dingtalkConfig: { dmPolicy: "open", messageType: "markdown" } as any,
+      data: {
+        msgId: "m_legacy_quote_1",
+        msgtype: "text",
+        text: { content: "当前消息" },
+        content: { quoteContent: "旧引用正文" },
+        conversationType: "1",
+        conversationId: "cid_ok",
+        senderId: "user_1",
+        chatbotUserId: "bot_1",
+        sessionWebhook: "https://session.webhook",
+        createAt: Date.now(),
+      },
+    } as any);
+
+    expect(log.debug).toHaveBeenCalledWith(
+      expect.stringContaining("Legacy quoteContent present without resolvable quotedRef"),
+    );
+    expect(mockedUpsertInboundMessageContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        msgId: "m_legacy_quote_1",
+        text: "当前消息",
+        quotedRef: undefined,
+      }),
+    );
   });
 
   it("writes normalized inbound journal text without quoted prefix noise", async () => {
@@ -1552,7 +1609,7 @@ describe("inbound-handler", () => {
       .mockReturnValueOnce("/tmp/dm-agent-store.json");
     shared.getRuntimeMock.mockReturnValueOnce(runtime);
     shared.extractMessageContentMock.mockReturnValueOnce({
-      text: '[引用消息: "历史原文"]\n\n真正正文',
+      text: "真正正文",
       messageType: "text",
     });
 
@@ -1623,7 +1680,7 @@ describe("inbound-handler", () => {
     );
   });
 
-  it("still resolves originalMsgId when body text happens to contain quote marker text", async () => {
+  it("keeps literal quote marker text in body while tracking quotedRef separately", async () => {
     const runtime = buildRuntime();
     runtime.channel.session.resolveStorePath = vi
       .fn()
@@ -1633,17 +1690,10 @@ describe("inbound-handler", () => {
     shared.extractMessageContentMock.mockReturnValueOnce({
       text: "我在讨论字符串 [引用消息:] 本身",
       messageType: "text",
+      quoted: {
+        msgId: "orig_msg_literal",
+      },
     });
-    mockedResolveByMsgId.mockReturnValueOnce({
-      msgId: "orig_msg_literal",
-      direction: "inbound",
-      topic: null,
-      accountId: "main",
-      conversationId: "cid_ok",
-      text: "被引用原文",
-      createdAt: Date.now() - 1000,
-      updatedAt: Date.now(),
-    } as any);
 
     await handleDingTalkMessage({
       cfg: {},
@@ -1666,11 +1716,15 @@ describe("inbound-handler", () => {
     } as any);
 
     const envelopeArg = (runtime.channel.reply.formatInboundEnvelope as any).mock.calls[0]?.[0];
-    expect(envelopeArg.body).toContain('[引用消息: "被引用原文"]');
-    expect(mockedResolveByMsgId).toHaveBeenCalledWith(
+    expect(envelopeArg.body).toContain("我在讨论字符串 [引用消息:] 本身");
+    expect(runtime.channel.reply.finalizeInboundContext).toHaveBeenCalledWith(
       expect.objectContaining({
-        storePath: "/tmp/dm-account-store.json",
-        msgId: "orig_msg_literal",
+        RawBody: "我在讨论字符串 [引用消息:] 本身",
+        QuotedRef: {
+          targetDirection: "inbound",
+          key: "msgId",
+          value: "orig_msg_literal",
+        },
       }),
     );
   });
@@ -1707,11 +1761,18 @@ describe("inbound-handler", () => {
       expect.anything(),
       "user_1",
       expect.any(String),
-      expect.objectContaining({ storePath: "/tmp/account-store.json" }),
+      expect.objectContaining({
+        storePath: "/tmp/account-store.json",
+        quotedRef: {
+          targetDirection: "inbound",
+          key: "msgId",
+          value: "m5",
+        },
+      }),
     );
   });
 
-  it("handleDingTalkMessage restores quoted card by originalProcessQueryKey", async () => {
+  it("handleDingTalkMessage tracks outbound quoted card by processQueryKey without injecting card text", async () => {
     const runtime = buildRuntime();
     runtime.channel.session.resolveStorePath = vi
       .fn()
@@ -1719,25 +1780,13 @@ describe("inbound-handler", () => {
       .mockReturnValueOnce("/tmp/agent-store.json");
     shared.getRuntimeMock.mockReturnValueOnce(runtime);
     shared.extractMessageContentMock.mockReturnValueOnce({
-      text: "[引用了机器人的回复]\n\nhello",
+      text: "hello",
       messageType: "text",
       quoted: {
-        prefix: "[引用了机器人的回复]\n\n",
         isQuotedCard: true,
         processQueryKey: "carrier_quoted_1",
       },
     });
-    mockedResolveByAlias.mockReturnValueOnce({
-      msgId: "carrier_quoted_1",
-      direction: "outbound",
-      topic: null,
-      accountId: "main",
-      conversationId: "user_1",
-      text: "机器人之前的回复内容",
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      delivery: { processQueryKey: "carrier_quoted_1", kind: "proactive-card" },
-    } as any);
 
     await handleDingTalkMessage({
       cfg: {},
@@ -1759,23 +1808,33 @@ describe("inbound-handler", () => {
       },
     } as any);
 
-    expect(mockedResolveByAlias).toHaveBeenCalledWith(
+    expect(mockedResolveByAlias).not.toHaveBeenCalled();
+    expect(mockedUpsertInboundMessageContext).toHaveBeenCalledWith(
       expect.objectContaining({
-        storePath: "/tmp/account-store.json",
-        accountId: "main",
-        conversationId: "user_1",
-        kind: "processQueryKey",
-        value: "carrier_quoted_1",
+        msgId: "m5_card_quote",
+        text: "hello",
+        quotedRef: {
+          targetDirection: "outbound",
+          key: "processQueryKey",
+          value: "carrier_quoted_1",
+        },
       }),
     );
     expect(runtime.channel.reply.finalizeInboundContext).toHaveBeenCalledWith(
       expect.objectContaining({
-        RawBody: '[引用机器人回复: "机器人之前的回复内容"]\n\nhello',
+        RawBody: "hello",
+        QuotedRef: {
+          targetDirection: "outbound",
+          key: "processQueryKey",
+          value: "carrier_quoted_1",
+        },
+        QuotedRefJson:
+          '{"targetDirection":"outbound","key":"processQueryKey","value":"carrier_quoted_1"}',
       }),
     );
   });
 
-  it("handleDingTalkMessage falls back to createdAt matcher only when processQueryKey is missing", async () => {
+  it("handleDingTalkMessage records outbound createdAt fallback when quoted card key is missing", async () => {
     const runtime = buildRuntime();
     runtime.channel.session.resolveStorePath = vi
       .fn()
@@ -1783,24 +1842,13 @@ describe("inbound-handler", () => {
       .mockReturnValueOnce("/tmp/agent-store.json");
     shared.getRuntimeMock.mockReturnValueOnce(runtime);
     shared.extractMessageContentMock.mockReturnValueOnce({
-      text: "[引用了机器人的回复]\n\nhello",
+      text: "hello",
       messageType: "text",
       quoted: {
-        prefix: "[引用了机器人的回复]\n\n",
         isQuotedCard: true,
         cardCreatedAt: 1772817989679,
       },
     });
-    mockedResolveByCreatedAtWindow.mockReturnValueOnce({
-      msgId: "createdAt:fallback",
-      direction: "outbound",
-      topic: null,
-      accountId: "main",
-      conversationId: "user_1",
-      text: "旧兼容卡片内容",
-      createdAt: 1772817989679,
-      updatedAt: Date.now(),
-    } as any);
 
     await handleDingTalkMessage({
       cfg: {},
@@ -1822,18 +1870,16 @@ describe("inbound-handler", () => {
     } as any);
 
     expect(mockedResolveByAlias).not.toHaveBeenCalled();
-    expect(mockedResolveByCreatedAtWindow).toHaveBeenCalledWith(
-      expect.objectContaining({
-        storePath: "/tmp/account-store.json",
-        accountId: "main",
-        conversationId: "user_1",
-        createdAt: 1772817989679,
-        direction: "outbound",
-      }),
-    );
+    expect(mockedResolveByCreatedAtWindow).not.toHaveBeenCalled();
     expect(runtime.channel.reply.finalizeInboundContext).toHaveBeenCalledWith(
       expect.objectContaining({
-        RawBody: '[引用机器人回复: "旧兼容卡片内容"]\n\nhello',
+        RawBody: "hello",
+        QuotedRef: {
+          targetDirection: "outbound",
+          fallbackCreatedAt: 1772817989679,
+        },
+        QuotedRefJson:
+          '{"targetDirection":"outbound","fallbackCreatedAt":1772817989679}',
       }),
     );
   });
@@ -1842,10 +1888,9 @@ describe("inbound-handler", () => {
     const runtime = buildRuntime();
     shared.getRuntimeMock.mockReturnValueOnce(runtime);
     shared.extractMessageContentMock.mockReturnValueOnce({
-      text: "[引用文件]\n\n群聊文件",
+      text: "群聊文件",
       messageType: "text",
       quoted: {
-        prefix: "[引用文件]\n\n",
         isQuotedFile: true,
         msgId: "group_file_msg_1",
         fileCreatedAt: 1772863284581,
@@ -2086,10 +2131,9 @@ describe("inbound-handler", () => {
     });
     messageContextStore.clearMessageContextCacheForTest();
     shared.extractMessageContentMock.mockReturnValueOnce({
-      text: "[引用了钉钉文档]\n\n我引用了什么？",
+      text: "我引用了什么？",
       messageType: "text",
       quoted: {
-        prefix: "[引用了钉钉文档]\n\n",
         isQuotedDocCard: true,
         msgId: "doc_origin_msg_2",
       },
@@ -2129,8 +2173,13 @@ describe("inbound-handler", () => {
     );
     expect(runtime.channel.reply.finalizeInboundContext).toHaveBeenCalledWith(
       expect.objectContaining({
-        RawBody: "[引用了钉钉文档]\n\n我引用了什么？",
+        RawBody: "我引用了什么？",
         MediaType: "application/pdf",
+        QuotedRef: {
+          targetDirection: "inbound",
+          key: "msgId",
+          value: "doc_origin_msg_2",
+        },
       }),
     );
   });
@@ -2140,10 +2189,9 @@ describe("inbound-handler", () => {
     shared.getRuntimeMock.mockReturnValueOnce(runtime);
     messageContextStore.clearMessageContextCacheForTest();
     shared.extractMessageContentMock.mockReturnValueOnce({
-      text: "[引用了钉钉文档]\n\n1",
+      text: "1",
       messageType: "text",
       quoted: {
-        prefix: "[引用了钉钉文档]\n\n",
         isQuotedDocCard: true,
         msgId: "missing_doc_msg",
       },
@@ -2174,6 +2222,11 @@ describe("inbound-handler", () => {
     expect(runtime.channel.reply.finalizeInboundContext).toHaveBeenCalledWith(
       expect.objectContaining({
         RawBody: "[引用了钉钉文档，但无法获取内容]\n\n1",
+        QuotedRef: {
+          targetDirection: "inbound",
+          key: "msgId",
+          value: "missing_doc_msg",
+        },
       }),
     );
   });
@@ -2183,10 +2236,9 @@ describe("inbound-handler", () => {
     shared.getRuntimeMock.mockReturnValueOnce(runtime);
     messageContextStore.clearMessageContextCacheForTest();
     shared.extractMessageContentMock.mockReturnValueOnce({
-      text: "[引用了钉钉文档]\n\n1",
+      text: "1",
       messageType: "text",
       quoted: {
-        prefix: "[引用了钉钉文档]\n\n",
         isQuotedDocCard: true,
         msgId: "group_doc_msg",
         fileCreatedAt: 1772901945282,
@@ -2240,8 +2292,13 @@ describe("inbound-handler", () => {
     expect(restored!.media?.fileId).toBe("file_group_doc");
     expect(runtime.channel.reply.finalizeInboundContext).toHaveBeenCalledWith(
       expect.objectContaining({
-        RawBody: "[引用了钉钉文档]\n\n1",
+        RawBody: "1",
         MediaType: "application/pdf",
+        QuotedRef: {
+          targetDirection: "inbound",
+          key: "msgId",
+          value: "group_doc_msg",
+        },
       }),
     );
   });
@@ -2266,10 +2323,9 @@ describe("inbound-handler", () => {
     });
     messageContextStore.clearMessageContextCacheForTest();
     shared.extractMessageContentMock.mockReturnValueOnce({
-      text: "[引用文件]\n\n群聊文件",
+      text: "群聊文件",
       messageType: "text",
       quoted: {
-        prefix: "[引用文件]\n\n",
         isQuotedFile: true,
         msgId: "file_origin",
         fileCreatedAt: 1772863284581,
@@ -2340,7 +2396,18 @@ describe("inbound-handler", () => {
     } as any);
 
     expect(shared.finishAICardMock).toHaveBeenCalledTimes(1);
-    expect(shared.finishAICardMock).toHaveBeenCalledWith(card, "✅ Done", undefined);
+    expect(shared.finishAICardMock).toHaveBeenCalledWith(
+      card,
+      "✅ Done",
+      undefined,
+      {
+        quotedRef: {
+          targetDirection: "inbound",
+          key: "msgId",
+          value: "m6",
+        },
+      },
+    );
   });
 
   it("handleDingTalkMessage falls back to markdown sends when createAICard returns null", async () => {
@@ -2405,7 +2472,19 @@ describe("inbound-handler", () => {
     } as any);
 
     expect(shared.finishAICardMock).toHaveBeenCalledTimes(1);
-    expect(shared.finishAICardMock).toHaveBeenCalledWith(card, "✅ Done", undefined);
+    expect(shared.finishAICardMock).toHaveBeenCalledWith(
+      card,
+      "✅ Done",
+      undefined,
+      {
+        quotedRef: {
+          targetDirection: "inbound",
+          key: "msgId",
+          value: "m6_tool",
+        },
+      },
+    );
+    expect(shared.sendMessageMock.mock.calls[0]?.[3]?.quotedRef).toBeUndefined();
     expect(shared.sendMessageMock).toHaveBeenCalledWith(
       expect.anything(),
       "user_1",
@@ -2491,11 +2570,20 @@ describe("inbound-handler", () => {
       undefined,
       undefined,
     );
-    expect(shared.sendBySessionMock).toHaveBeenCalledWith(
+    expect(shared.sendMessageMock).toHaveBeenCalledWith(
       expect.anything(),
-      "https://session.webhook",
+      "user_1",
       "",
-      expect.objectContaining({ mediaPath: "/tmp/prepared/report.pdf", mediaType: "file" }),
+      expect.objectContaining({
+        sessionWebhook: "https://session.webhook",
+        mediaPath: "/tmp/prepared/report.pdf",
+        mediaType: "file",
+        quotedRef: {
+          targetDirection: "inbound",
+          key: "msgId",
+          value: "m_media_single",
+        },
+      }),
     );
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
@@ -2539,19 +2627,37 @@ describe("inbound-handler", () => {
       },
     } as any);
 
-    expect(shared.sendBySessionMock).toHaveBeenNthCalledWith(
+    expect(shared.sendMessageMock).toHaveBeenNthCalledWith(
       1,
       expect.anything(),
-      "https://session.webhook",
+      "user_1",
       "",
-      expect.objectContaining({ mediaPath: "/tmp/prepared/a.png", mediaType: "image" }),
+      expect.objectContaining({
+        sessionWebhook: "https://session.webhook",
+        mediaPath: "/tmp/prepared/a.png",
+        mediaType: "image",
+        quotedRef: {
+          targetDirection: "inbound",
+          key: "msgId",
+          value: "m_media_multi",
+        },
+      }),
     );
-    expect(shared.sendBySessionMock).toHaveBeenNthCalledWith(
+    expect(shared.sendMessageMock).toHaveBeenNthCalledWith(
       2,
       expect.anything(),
-      "https://session.webhook",
+      "user_1",
       "",
-      expect.objectContaining({ mediaPath: "/tmp/prepared/b.png", mediaType: "image" }),
+      expect.objectContaining({
+        sessionWebhook: "https://session.webhook",
+        mediaPath: "/tmp/prepared/b.png",
+        mediaType: "image",
+        quotedRef: {
+          targetDirection: "inbound",
+          key: "msgId",
+          value: "m_media_multi",
+        },
+      }),
     );
     expect(cleanupA).toHaveBeenCalledTimes(1);
     expect(cleanupB).toHaveBeenCalledTimes(1);
@@ -2589,17 +2695,33 @@ describe("inbound-handler", () => {
       },
     } as any);
 
-    expect(shared.sendBySessionMock).toHaveBeenCalledWith(
+    expect(shared.sendMessageMock).toHaveBeenCalledWith(
       expect.anything(),
-      "https://session.webhook",
+      "user_1",
       "",
-      expect.objectContaining({ mediaPath: "/tmp/prepared/report.pdf", mediaType: "file" }),
+      expect.objectContaining({
+        sessionWebhook: "https://session.webhook",
+        mediaPath: "/tmp/prepared/report.pdf",
+        mediaType: "file",
+        quotedRef: {
+          targetDirection: "inbound",
+          key: "msgId",
+          value: "m_media_text",
+        },
+      }),
     );
     expect(shared.sendMessageMock).toHaveBeenCalledWith(
       expect.anything(),
       "user_1",
       "final output",
-      expect.objectContaining({ sessionWebhook: "https://session.webhook" }),
+      expect.objectContaining({
+        sessionWebhook: "https://session.webhook",
+        quotedRef: {
+          targetDirection: "inbound",
+          key: "msgId",
+          value: "m_media_text",
+        },
+      }),
     );
   });
 
@@ -2638,13 +2760,33 @@ describe("inbound-handler", () => {
       },
     } as any);
 
-    expect(shared.sendBySessionMock).toHaveBeenCalledWith(
+    expect(shared.sendMessageMock).toHaveBeenCalledWith(
       expect.anything(),
-      "https://session.webhook",
+      "user_1",
       "",
-      expect.objectContaining({ mediaPath: "/tmp/prepared/report.pdf", mediaType: "file" }),
+      expect.objectContaining({
+        sessionWebhook: "https://session.webhook",
+        mediaPath: "/tmp/prepared/report.pdf",
+        mediaType: "file",
+        quotedRef: {
+          targetDirection: "inbound",
+          key: "msgId",
+          value: "m_card_media_text",
+        },
+      }),
     );
-    expect(shared.finishAICardMock).toHaveBeenCalledWith(card, "final output", undefined);
+    expect(shared.finishAICardMock).toHaveBeenCalledWith(
+      card,
+      "final output",
+      undefined,
+      {
+        quotedRef: {
+          targetDirection: "inbound",
+          key: "msgId",
+          value: "m_card_media_text",
+        },
+      },
+    );
   });
 
   it("deliver callback falls back to proactive media send when sessionWebhook is absent", async () => {
@@ -2684,11 +2826,17 @@ describe("inbound-handler", () => {
       "user_1",
       "/tmp/prepared/report.pdf",
       "file",
-      expect.objectContaining({
+      {
         accountId: "main",
+        log: undefined,
         storePath: "/tmp/store.json",
-        conversationId: "user_1",
-      }),
+        conversationId: "cid_ok",
+        quotedRef: {
+          targetDirection: "inbound",
+          key: "msgId",
+          value: "m_media_proactive",
+        },
+      },
     );
   });
 
@@ -2710,7 +2858,7 @@ describe("inbound-handler", () => {
       path: "/tmp/prepared/report.pdf",
       cleanup,
     });
-    shared.sendBySessionMock.mockRejectedValueOnce(new Error("send failed"));
+    shared.sendMessageMock.mockResolvedValueOnce({ ok: false, error: "send failed" });
 
     await expect(
       handleDingTalkMessage({
