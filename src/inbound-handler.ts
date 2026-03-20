@@ -44,8 +44,13 @@ import {
   DEFAULT_MESSAGE_CONTEXT_TTL_DAYS,
   upsertInboundMessageContext,
 } from "./message-context-store";
-import { buildInboundQuotedRef, createReplyQuotedRef, resolveQuotedRecord } from "./messaging/quoted-ref";
 import { extractMessageContent } from "./message-utils";
+import { resolveQuotedRuntimeContext } from "./messaging/quoted-context";
+import {
+  buildInboundQuotedRef,
+  createReplyQuotedRef,
+  resolveQuotedRecord,
+} from "./messaging/quoted-ref";
 import { registerPeerId } from "./peer-id-registry";
 import {
   clearProactiveRiskObservationsForTest,
@@ -984,20 +989,25 @@ export async function handleDingTalkMessage(params: HandleDingTalkMessageParams)
   if (hasLegacyQuoteContent && !quotedRef) {
     log?.debug?.(
       `[DingTalk] Legacy quoteContent present without resolvable quotedRef: ` +
-      `conversationType=${data.conversationType} conversationId=${data.conversationId} ` +
-      `msgId=${data.msgId} originalMsgId=${data.originalMsgId || "(none)"}`,
+        `conversationType=${data.conversationType} conversationId=${data.conversationId} ` +
+        `msgId=${data.msgId} originalMsgId=${data.originalMsgId || "(none)"}`,
     );
   }
   if (quotedRef) {
     log?.debug?.(
       `[DingTalk][QuotedRef] Built inbound quotedRef msgId=${data.msgId} scope=${groupId} ` +
-      `quotedRef=${JSON.stringify(quotedRef)}`,
+        `quotedRef=${JSON.stringify(quotedRef)}`,
     );
-  } else if (data.text?.isReplyMsg || data.originalMsgId || data.originalProcessQueryKey || content.quoted) {
+  } else if (
+    data.text?.isReplyMsg ||
+    data.originalMsgId ||
+    data.originalProcessQueryKey ||
+    content.quoted
+  ) {
     log?.debug?.(
       `[DingTalk][QuotedRef] Reply metadata present without resolvable quotedRef ` +
-      `msgId=${data.msgId} scope=${groupId} originalMsgId=${data.originalMsgId || "(none)"} ` +
-      `originalProcessQueryKey=${data.originalProcessQueryKey || "(none)"}`,
+        `msgId=${data.msgId} scope=${groupId} originalMsgId=${data.originalMsgId || "(none)"} ` +
+        `originalProcessQueryKey=${data.originalProcessQueryKey || "(none)"}`,
     );
   }
 
@@ -1105,6 +1115,14 @@ export async function handleDingTalkMessage(params: HandleDingTalkMessageParams)
     quotedRef,
     log,
   });
+  const quotedRuntimeContext = resolveQuotedRuntimeContext({
+    storePath: accountStorePath,
+    accountId,
+    conversationId: data.conversationId,
+    quotedRef,
+    firstRecord: quotedRecord,
+    log,
+  });
 
   // Try downloading a quoted file from cached downloadCode/spaceId+fileId.
   const tryDownloadFromRecord = async (
@@ -1126,7 +1144,7 @@ export async function handleDingTalkMessage(params: HandleDingTalkMessageParams)
       if (media) {
         log?.debug?.(
           `[DingTalk][QuotedRef] Recovered quoted media from cached downloadCode ` +
-          `recordMsgId=${record.msgId || "(none)"} scope=${data.conversationId}`,
+            `recordMsgId=${record.msgId || "(none)"} scope=${data.conversationId}`,
         );
       }
     }
@@ -1143,7 +1161,7 @@ export async function handleDingTalkMessage(params: HandleDingTalkMessageParams)
         if (media) {
           log?.debug?.(
             `[DingTalk][QuotedRef] Recovered quoted media from cached spaceId/fileId ` +
-            `recordMsgId=${record.msgId || "(none)"} scope=${data.conversationId}`,
+              `recordMsgId=${record.msgId || "(none)"} scope=${data.conversationId}`,
           );
         }
       } catch (err: any) {
@@ -1200,7 +1218,7 @@ export async function handleDingTalkMessage(params: HandleDingTalkMessageParams)
         fileResolved = true;
         log?.debug?.(
           `[DingTalk][QuotedRef] Recovered quoted file from group file fallback ` +
-          `scope=${data.conversationId} quotedMsgId=${content.quoted.msgId || "(none)"}`,
+            `scope=${data.conversationId} quotedMsgId=${content.quoted.msgId || "(none)"}`,
         );
         if (content.quoted.msgId) {
           upsertInboundMessageContext({
@@ -1263,7 +1281,7 @@ export async function handleDingTalkMessage(params: HandleDingTalkMessageParams)
         docResolved = true;
         log?.debug?.(
           `[DingTalk][QuotedRef] Recovered quoted doc card from group file fallback ` +
-          `scope=${data.conversationId} quotedMsgId=${content.quoted.msgId || "(none)"}`,
+            `scope=${data.conversationId} quotedMsgId=${content.quoted.msgId || "(none)"}`,
         );
         if (content.quoted.msgId) {
           upsertInboundMessageContext({
@@ -1370,6 +1388,13 @@ export async function handleDingTalkMessage(params: HandleDingTalkMessageParams)
     CommandBody: inboundText,
     QuotedRef: quotedRef,
     QuotedRefJson: quotedRef ? JSON.stringify(quotedRef) : undefined,
+    ReplyToId: quotedRuntimeContext?.replyToId,
+    ReplyToBody: quotedRuntimeContext?.replyToBody,
+    ReplyToSender: quotedRuntimeContext?.replyToSender,
+    ReplyToIsQuote: quotedRuntimeContext?.replyToIsQuote,
+    UntrustedContext: quotedRuntimeContext?.untrustedContext
+      ? [quotedRuntimeContext.untrustedContext]
+      : undefined,
     From: to,
     To: to,
     SessionKey: route.sessionKey,
