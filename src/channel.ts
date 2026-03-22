@@ -322,7 +322,7 @@ export const dingtalkPlugin: DingTalkChannelPlugin = {
     id: "dingtalk",
     label: "DingTalk",
     selectionLabel: "DingTalk (钉钉)",
-    docsPath: "/channels/dingtalk",
+    docsPath: "https://github.com/soimy/openclaw-channel-dingtalk",
     blurb: "钉钉企业内部机器人，使用 Stream 模式，无需公网 IP。",
     aliases: ["dd", "ding"],
   },
