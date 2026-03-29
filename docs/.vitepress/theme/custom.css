@@ -18,6 +18,23 @@
   display: none;
 }
 
+.vp-doc .repo-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0 0 1rem;
+}
+
+.vp-doc .repo-badges a {
+  display: inline-flex;
+  line-height: 0;
+}
+
+.vp-doc .repo-badges img {
+  display: inline-block;
+}
+
 .dark .readme-banner-theme-switch .banner-light {
   display: none;
 }
