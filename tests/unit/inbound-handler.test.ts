@@ -1912,12 +1912,22 @@ describe("inbound-handler", () => {
     );
   });
 
-  it("handleDingTalkMessage runs non-card flow and sends thinking + final outputs", async () => {
+  it("handleDingTalkMessage markdown flow sends block answers through dispatcher delivery", async () => {
     const runtime = buildRuntime();
+    runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher = vi
+      .fn()
+      .mockImplementation(async ({ dispatcherOptions, replyOptions }) => {
+        expect(replyOptions?.disableBlockStreaming).toBe(false);
+        await dispatcherOptions.deliver({ text: "阶段性总结" }, { kind: "block" });
+        await dispatcherOptions.deliver({ text: "阶段性总结和补充" }, { kind: "final" });
+        return { queuedFinal: false };
+      });
+    fs.rmSync("/tmp/account-store-no-reasoning.json", { force: true });
+    fs.rmSync("/tmp/agent-store-no-reasoning.json", { force: true });
     runtime.channel.session.resolveStorePath = vi
       .fn()
-      .mockReturnValueOnce("/tmp/account-store.json")
-      .mockReturnValueOnce("/tmp/agent-store.json");
+      .mockReturnValueOnce("/tmp/account-store-no-reasoning.json")
+      .mockReturnValueOnce("/tmp/agent-store-no-reasoning.json");
     shared.getRuntimeMock.mockReturnValueOnce(runtime);
 
     await handleDingTalkMessage({
@@ -1939,18 +1949,27 @@ describe("inbound-handler", () => {
       },
     } as any);
 
-    expect(shared.sendMessageMock).toHaveBeenCalled();
-    expect(shared.sendMessageMock).toHaveBeenCalledWith(
+    expect(shared.sendMessageMock).toHaveBeenNthCalledWith(
+      1,
       expect.anything(),
       "user_1",
-      expect.any(String),
+      "阶段性总结",
       expect.objectContaining({
-        storePath: "/tmp/account-store.json",
+        storePath: "/tmp/account-store-no-reasoning.json",
         quotedRef: {
           targetDirection: "inbound",
           key: "msgId",
           value: "m5",
         },
+      }),
+    );
+    expect(shared.sendMessageMock).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      "user_1",
+      "和补充",
+      expect.objectContaining({
+        storePath: "/tmp/account-store-no-reasoning.json",
       }),
     );
   });
@@ -3441,6 +3460,46 @@ describe("inbound-handler", () => {
     });
   });
 
+  it("handleDingTalkMessage sends DONE in markdown mode when no visible output is produced", async () => {
+    const runtime = buildRuntime();
+    runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher = vi
+      .fn()
+      .mockResolvedValue({ queuedFinal: "" });
+    shared.getRuntimeMock.mockReturnValueOnce(runtime);
+
+    await handleDingTalkMessage({
+      cfg: {},
+      accountId: "main",
+      sessionWebhook: "https://session.webhook",
+      log: undefined,
+      dingtalkConfig: { dmPolicy: "open", messageType: "markdown", ackReaction: "" } as any,
+      data: {
+        msgId: "m6_markdown_done",
+        msgtype: "text",
+        text: { content: "hello" },
+        conversationType: "1",
+        conversationId: "cid_ok",
+        senderId: "user_1",
+        chatbotUserId: "bot_1",
+        sessionWebhook: "https://session.webhook",
+        createAt: Date.now(),
+      },
+    } as any);
+
+    expect(shared.sendMessageMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "user_1",
+      "✅ Done",
+      expect.objectContaining({
+        quotedRef: {
+          targetDirection: "inbound",
+          key: "msgId",
+          value: "m6_markdown_done",
+        },
+      }),
+    );
+  });
+
   it("handleDingTalkMessage falls back to markdown sends when createAICard returns null", async () => {
     shared.createAICardMock.mockResolvedValueOnce(null);
 
@@ -3723,7 +3782,8 @@ describe("inbound-handler", () => {
       },
     } as any);
 
-    expect(shared.sendMessageMock).toHaveBeenCalledWith(
+    expect(shared.sendMessageMock).toHaveBeenNthCalledWith(
+      1,
       expect.anything(),
       "user_1",
       "",
@@ -3738,7 +3798,8 @@ describe("inbound-handler", () => {
         },
       }),
     );
-    expect(shared.sendMessageMock).toHaveBeenCalledWith(
+    expect(shared.sendMessageMock).toHaveBeenNthCalledWith(
+      2,
       expect.anything(),
       "user_1",
       "final output",
@@ -3751,6 +3812,134 @@ describe("inbound-handler", () => {
         },
       }),
     );
+  });
+
+  it("markdown flow disables block streaming when session reasoning is on", async () => {
+    const runtime = buildRuntime();
+    runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher = vi
+      .fn()
+      .mockImplementation(async ({ dispatcherOptions, replyOptions }) => {
+        expect(replyOptions?.disableBlockStreaming).toBe(true);
+        if (replyOptions?.disableBlockStreaming) {
+          await dispatcherOptions.deliver({ text: "reasoning on正常" }, { kind: "final" });
+        } else {
+          await dispatcherOptions.deliver({
+            text: "Reasoning:\n_用户再次要求分步思考后回答\"reasoning on正常\"。系统标注 `Reasoning ON`，需要显式输出内部推理。_",
+          }, { kind: "block" });
+        }
+        return { queuedFinal: false };
+      });
+    runtime.channel.session.resolveStorePath = vi
+      .fn()
+      .mockReturnValueOnce("/tmp/account-store-reasoning-on.json")
+      .mockReturnValueOnce("/tmp/agent-store-reasoning-on.json");
+    shared.getRuntimeMock.mockReturnValueOnce(runtime);
+    fs.writeFileSync(
+      "/tmp/agent-store-reasoning-on.json",
+      JSON.stringify({
+        s1: {
+          sessionId: "session-1",
+          updatedAt: Date.now(),
+          reasoningLevel: "on",
+        },
+      }),
+    );
+
+    await handleDingTalkMessage({
+      cfg: {},
+      accountId: "main",
+      sessionWebhook: "https://session.webhook",
+      log: undefined,
+      dingtalkConfig: { dmPolicy: "open", messageType: "markdown", ackReaction: "" } as any,
+      data: {
+        msgId: "m_markdown_turn_reset",
+        msgtype: "text",
+        text: { content: "hello" },
+        conversationType: "1",
+        conversationId: "cid_ok",
+        senderId: "user_1",
+        chatbotUserId: "bot_1",
+        sessionWebhook: "https://session.webhook",
+        createAt: Date.now(),
+      },
+    } as any);
+
+    expect(shared.sendMessageMock.mock.calls.map((call: any[]) => call[2])).toEqual(["reasoning on正常"]);
+  });
+
+  it("reuses the cached session reasoning level when session updatedAt is unchanged", async () => {
+    const runtime = buildRuntime();
+    runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher = vi
+      .fn()
+      .mockImplementation(async ({ dispatcherOptions, replyOptions }) => {
+        expect(replyOptions?.disableBlockStreaming).toBe(true);
+        await dispatcherOptions.deliver({ text: "reasoning on正常" }, { kind: "final" });
+        return { queuedFinal: false };
+      });
+    runtime.channel.session.resolveStorePath = vi
+      .fn()
+      .mockReturnValueOnce("/tmp/account-store-reasoning-cache.json")
+      .mockReturnValueOnce("/tmp/agent-store-reasoning-cache.json")
+      .mockReturnValueOnce("/tmp/account-store-reasoning-cache.json")
+      .mockReturnValueOnce("/tmp/agent-store-reasoning-cache.json");
+    runtime.channel.session.readSessionUpdatedAt = vi.fn().mockReturnValue(1234567890);
+    shared.getRuntimeMock.mockReturnValue(runtime);
+
+    fs.writeFileSync(
+      "/tmp/agent-store-reasoning-cache.json",
+      JSON.stringify({
+        s1: {
+          sessionId: "session-1",
+          updatedAt: 1234567890,
+          reasoningLevel: "on",
+        },
+      }),
+    );
+
+    const readSpy = vi.spyOn(fs, "readFileSync");
+
+    await handleDingTalkMessage({
+      cfg: {},
+      accountId: "main",
+      sessionWebhook: "https://session.webhook",
+      log: undefined,
+      dingtalkConfig: { dmPolicy: "open", messageType: "markdown", ackReaction: "" } as any,
+      data: {
+        msgId: "m_reasoning_cache_1",
+        msgtype: "text",
+        text: { content: "hello" },
+        conversationType: "1",
+        conversationId: "cid_ok",
+        senderId: "user_1",
+        chatbotUserId: "bot_1",
+        sessionWebhook: "https://session.webhook",
+        createAt: Date.now(),
+      },
+    } as any);
+
+    await handleDingTalkMessage({
+      cfg: {},
+      accountId: "main",
+      sessionWebhook: "https://session.webhook",
+      log: undefined,
+      dingtalkConfig: { dmPolicy: "open", messageType: "markdown", ackReaction: "" } as any,
+      data: {
+        msgId: "m_reasoning_cache_2",
+        msgtype: "text",
+        text: { content: "hello again" },
+        conversationType: "1",
+        conversationId: "cid_ok",
+        senderId: "user_1",
+        chatbotUserId: "bot_1",
+        sessionWebhook: "https://session.webhook",
+        createAt: Date.now(),
+      },
+    } as any);
+
+    const readsForAgentStore = readSpy.mock.calls.filter(
+      (call) => String(call[0]) === "/tmp/agent-store-reasoning-cache.json",
+    );
+    expect(readsForAgentStore).toHaveLength(1);
   });
 
   it("card mode + media bypasses finalContent accumulation and still finalizes with text", async () => {
