@@ -171,20 +171,15 @@ npm view @soimy/dingtalk
 在测试环境验证安装流程：
 
 ```bash
-# 通过源码链接安装（当前推荐验证路径）
+# 通过 ClawHub 安装（推荐验收路径）
+openclaw plugins install @soimy/dingtalk
+
+# 如需验证本地开发/联调链路，可额外检查源码链接安装
 git clone https://github.com/soimy/openclaw-channel-dingtalk.git
 cd openclaw-channel-dingtalk
 npm install
 openclaw plugins install -l .
-
-# 或通过 npm 直接安装（仅测试）
-npm install @soimy/dingtalk
 ```
-
-> [!IMPORTANT]
-> 当前上游 ClawHub 安装链路对 `@soimy/dingtalk` 仍有已知 bug，发布后不要把
-> `openclaw plugins install @soimy/dingtalk` 作为唯一验收路径。
-> 请至少验证一次 `git clone + openclaw plugins install -l .` 的安装链路。
 
 ## 发布检查清单
 
@@ -257,15 +252,11 @@ npm version prerelease --preid=beta
 git push origin main --follow-tags
 ```
 
-用户可通过以下方式安装：
+用户可通过以下方式通过 ClawHub 安装：
 
 ```bash
 openclaw plugins install @soimy/dingtalk@beta
 ```
-
-> [!IMPORTANT]
-> 在上游 ClawHub 修复前，beta 版本也不应默认引导用户使用上述命令。
-> 如需验证 beta，请优先使用源码链接安装或直接 `npm install @soimy/dingtalk@beta` 做包内容检查。
 
 ## 参考资源
 

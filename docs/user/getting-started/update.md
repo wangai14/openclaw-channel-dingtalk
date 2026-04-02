@@ -2,9 +2,9 @@
 
 更新方式取决于你最初的安装来源。
 
-## npm 安装来源
+## ClawHub 安装来源
 
-如果你是通过 npm 安装：
+如果你是通过 ClawHub 安装：
 
 ```bash
 openclaw plugins update dingtalk

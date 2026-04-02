@@ -4,13 +4,13 @@
 
 ## 推荐方式
 
-优先使用 npm 包安装：
+优先使用 ClawHub 安装：
 
 ```bash
 openclaw plugins install @soimy/dingtalk
 ```
 
-## 方式 A：通过 npm 包安装
+## 方式 A：通过 ClawHub 安装
 
 适合大多数用户，升级也最直接。
 

@@ -30,7 +30,7 @@
 
 ## 快速上手
 
-1. 安装插件（推荐 npm 安装）
+1. 安装插件（推荐 ClawHub 安装）
 
 ```bash
 openclaw plugins install @soimy/dingtalk
@@ -176,7 +176,7 @@ openclaw gateway restart
 - 增加一段「故障排除」快捷清单：收不到消息、群聊无响应、连接失败（并配日志截图）
 - 增加一张「成本提示」小卡片：`markdown` vs `card` 的 API 调用差异，提醒推理流/工具展示可能增加卡片流更新次数
 - 增加「安全策略示例」：`pairing`、`allowlist` 的典型配置片段（便于企业落地）
-- 增加「更新方式」：`openclaw plugins update dingtalk`（npm 安装）或源码更新后的重启流程
+- 增加「更新方式」：`openclaw plugins update dingtalk`（ClawHub 安装）或源码更新后的重启流程
 - 增加「贡献入口」：`npm run type-check` / `npm run lint` / `pnpm test`，欢迎提交 PR
 
 标签建议：`#OpenClaw` `#钉钉机器人` `#AI助手` `#内网部署` `#开源` `#Stream模式`
