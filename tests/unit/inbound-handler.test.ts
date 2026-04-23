@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import axios from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -136,6 +137,8 @@ const mockedUpsertInboundMessageContext = vi.mocked(
 const mockedResolveByMsgId = vi.mocked(messageContextStore.resolveByMsgId);
 const mockedResolveByAlias = vi.mocked(messageContextStore.resolveByAlias);
 const mockedResolveByCreatedAtWindow = vi.mocked(messageContextStore.resolveByCreatedAtWindow);
+const TEST_TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "dingtalk-inbound-unit-"));
+const STORE_PATH = path.join(TEST_TMP_DIR, "store.json");
 
 function buildRuntime() {
   return {
@@ -153,7 +156,7 @@ function buildRuntime() {
         }),
       },
       session: {
-        resolveStorePath: vi.fn().mockReturnValue("/tmp/store.json"),
+        resolveStorePath: vi.fn().mockReturnValue(STORE_PATH),
         readSessionUpdatedAt: vi.fn().mockReturnValue(null),
         recordInboundSession: vi.fn().mockResolvedValue(undefined),
       },
@@ -177,7 +180,7 @@ function buildRuntime() {
 describe("inbound-handler", () => {
   beforeEach(() => {
     clearTargetDirectoryStateCache();
-    const stateDir = path.join(path.dirname("/tmp/store.json"), "dingtalk-state");
+    const stateDir = path.join(TEST_TMP_DIR, "dingtalk-state");
     try {
       fs.rmSync(stateDir, { recursive: true, force: true });
     } catch (e) {
@@ -956,12 +959,12 @@ describe("inbound-handler", () => {
     } as any);
 
     const groups = listKnownGroupTargets({
-      storePath: "/tmp/store.json",
+      storePath: STORE_PATH,
       accountId: "default",
       query: "Dev Group",
     });
     const users = listKnownUserTargets({
-      storePath: "/tmp/store.json",
+      storePath: STORE_PATH,
       accountId: "default",
       query: "Alice",
     });
@@ -1091,7 +1094,7 @@ describe("inbound-handler", () => {
     // Pre-seed a cached record so quotedRecord is non-null and has a downloadCode.
     // Without the !fileResolved guard, Step 1 would call downloadMedia with this code.
     messageContextStore.upsertInboundMessageContext({
-      storePath: "/tmp/store.json",
+      storePath: STORE_PATH,
       accountId: "main",
       conversationId: "cid_step1_guard",
       msgId: "file_msg_step1",

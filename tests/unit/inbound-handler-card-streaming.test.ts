@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DingTalkConfig } from "../../src/types";
@@ -98,6 +99,8 @@ import { clearCardRunRegistryForTest } from "../../src/card/card-run-registry";
 import { clearTargetDirectoryStateCache } from "../../src/targeting/target-directory-store";
 
 const mockedUpsertInboundMessageContext = vi.mocked(messageContextStore.upsertInboundMessageContext);
+const TEST_TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "dingtalk-card-streaming-unit-"));
+const STORE_PATH = path.join(TEST_TMP_DIR, "store.json");
 
 function buildRuntime() {
   return {
@@ -115,7 +118,7 @@ function buildRuntime() {
         }),
       },
       session: {
-        resolveStorePath: vi.fn().mockReturnValue("/tmp/store.json"),
+        resolveStorePath: vi.fn().mockReturnValue(STORE_PATH),
         readSessionUpdatedAt: vi.fn().mockReturnValue(null),
         recordInboundSession: vi.fn().mockResolvedValue(undefined),
       },
@@ -139,7 +142,7 @@ function buildRuntime() {
 describe("inbound-handler card streaming", () => {
   beforeEach(() => {
     clearTargetDirectoryStateCache();
-    const stateDir = path.join(path.dirname("/tmp/store.json"), "dingtalk-state");
+    const stateDir = path.join(TEST_TMP_DIR, "dingtalk-state");
     try {
       fs.rmSync(stateDir, { recursive: true, force: true });
     } catch (e) {

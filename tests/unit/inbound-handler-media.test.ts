@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DingTalkConfig } from "../../src/types";
@@ -107,6 +108,8 @@ const mockedUpsertInboundMessageContext = vi.mocked(messageContextStore.upsertIn
 const mockedResolveByMsgId = vi.mocked(messageContextStore.resolveByMsgId);
 const mockedResolveByAlias = vi.mocked(messageContextStore.resolveByAlias);
 const mockedResolveByCreatedAtWindow = vi.mocked(messageContextStore.resolveByCreatedAtWindow);
+const TEST_TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "dingtalk-media-unit-"));
+const STORE_PATH = path.join(TEST_TMP_DIR, "store.json");
 
 function buildRuntime() {
   return {
@@ -124,7 +127,7 @@ function buildRuntime() {
         }),
       },
       session: {
-        resolveStorePath: vi.fn().mockReturnValue("/tmp/store.json"),
+        resolveStorePath: vi.fn().mockReturnValue(STORE_PATH),
         readSessionUpdatedAt: vi.fn().mockReturnValue(null),
         recordInboundSession: vi.fn().mockResolvedValue(undefined),
       },
@@ -149,7 +152,7 @@ describe("inbound-handler media handling", () => {
   beforeEach(() => {
     clearTargetDirectoryStateCache();
     // Use rimraf-style cleanup: retry on ENOTEMPTY
-    const stateDir = path.join(path.dirname("/tmp/store.json"), "dingtalk-state");
+    const stateDir = path.join(TEST_TMP_DIR, "dingtalk-state");
     try {
       fs.rmSync(stateDir, { recursive: true, force: true });
     } catch (e) {
@@ -625,7 +628,7 @@ describe("inbound-handler media handling", () => {
       {
         accountId: "main",
         log: undefined,
-        storePath: "/tmp/store.json",
+        storePath: STORE_PATH,
         conversationId: "cid_ok",
         quotedRef: {
           targetDirection: "inbound",

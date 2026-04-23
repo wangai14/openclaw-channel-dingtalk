@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DingTalkConfig } from "../../src/types";
@@ -107,6 +108,12 @@ const mockedUpsertInboundMessageContext = vi.mocked(messageContextStore.upsertIn
 const mockedResolveByMsgId = vi.mocked(messageContextStore.resolveByMsgId);
 const mockedResolveByAlias = vi.mocked(messageContextStore.resolveByAlias);
 const mockedResolveByCreatedAtWindow = vi.mocked(messageContextStore.resolveByCreatedAtWindow);
+const TEST_TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "dingtalk-quote-unit-"));
+const STORE_PATH = path.join(TEST_TMP_DIR, "store.json");
+const ACCOUNT_STORE_PATH = path.join(TEST_TMP_DIR, "account-store.json");
+const AGENT_STORE_PATH = path.join(TEST_TMP_DIR, "agent-store.json");
+const DM_ACCOUNT_STORE_PATH = path.join(TEST_TMP_DIR, "dm-account-store.json");
+const DM_AGENT_STORE_PATH = path.join(TEST_TMP_DIR, "dm-agent-store.json");
 
 function buildRuntime() {
   return {
@@ -124,7 +131,7 @@ function buildRuntime() {
         }),
       },
       session: {
-        resolveStorePath: vi.fn().mockReturnValue("/tmp/store.json"),
+        resolveStorePath: vi.fn().mockReturnValue(STORE_PATH),
         readSessionUpdatedAt: vi.fn().mockReturnValue(null),
         recordInboundSession: vi.fn().mockResolvedValue(undefined),
       },
@@ -149,7 +156,7 @@ describe("inbound-handler quote handling", () => {
   beforeEach(() => {
     clearTargetDirectoryStateCache();
     // Use rimraf-style cleanup: retry on ENOTEMPTY
-    const stateDir = path.join(path.dirname("/tmp/store.json"), "dingtalk-state");
+    const stateDir = path.join(TEST_TMP_DIR, "dingtalk-state");
     try {
       fs.rmSync(stateDir, { recursive: true, force: true });
     } catch (e) {
@@ -223,8 +230,8 @@ describe("inbound-handler quote handling", () => {
       const runtime = buildRuntime();
       runtime.channel.session.resolveStorePath = vi
         .fn()
-        .mockReturnValueOnce("/tmp/account-store.json")
-        .mockReturnValueOnce("/tmp/agent-store.json");
+        .mockReturnValueOnce(ACCOUNT_STORE_PATH)
+        .mockReturnValueOnce(AGENT_STORE_PATH);
       shared.getRuntimeMock.mockReturnValueOnce(runtime);
 
       await handleDingTalkMessage({
@@ -248,7 +255,7 @@ describe("inbound-handler quote handling", () => {
 
       expect(mockedUpsertInboundMessageContext).toHaveBeenCalledWith(
         expect.objectContaining({
-          storePath: "/tmp/account-store.json",
+          storePath: ACCOUNT_STORE_PATH,
           accountId: "main",
           conversationId: "cid_ok",
           msgId: "m_journal_1",
@@ -264,8 +271,8 @@ describe("inbound-handler quote handling", () => {
       const runtime = buildRuntime();
       runtime.channel.session.resolveStorePath = vi
         .fn()
-        .mockReturnValueOnce("/tmp/dm-account-store.json")
-        .mockReturnValueOnce("/tmp/dm-agent-store.json");
+        .mockReturnValueOnce(DM_ACCOUNT_STORE_PATH)
+        .mockReturnValueOnce(DM_AGENT_STORE_PATH);
       shared.getRuntimeMock.mockReturnValueOnce(runtime);
       shared.extractMessageContentMock.mockReturnValueOnce({
         text: "hello",
@@ -297,7 +304,7 @@ describe("inbound-handler quote handling", () => {
 
       expect(mockedUpsertInboundMessageContext).toHaveBeenCalledWith(
         expect.objectContaining({
-          storePath: "/tmp/dm-account-store.json",
+          storePath: DM_ACCOUNT_STORE_PATH,
           msgId: "m_quote_1",
           text: "hello",
           quotedRef: {
@@ -325,8 +332,8 @@ describe("inbound-handler quote handling", () => {
       const runtime = buildRuntime();
       runtime.channel.session.resolveStorePath = vi
         .fn()
-        .mockReturnValueOnce("/tmp/dm-account-store.json")
-        .mockReturnValueOnce("/tmp/dm-agent-store.json");
+        .mockReturnValueOnce(DM_ACCOUNT_STORE_PATH)
+        .mockReturnValueOnce(DM_AGENT_STORE_PATH);
       shared.getRuntimeMock.mockReturnValueOnce(runtime);
       shared.extractMessageContentMock.mockReturnValueOnce({
         text: "真正正文",
@@ -354,7 +361,7 @@ describe("inbound-handler quote handling", () => {
 
       expect(mockedUpsertInboundMessageContext).toHaveBeenCalledWith(
         expect.objectContaining({
-          storePath: "/tmp/dm-account-store.json",
+          storePath: DM_ACCOUNT_STORE_PATH,
           text: "真正正文",
         }),
       );
@@ -364,8 +371,8 @@ describe("inbound-handler quote handling", () => {
       const runtime = buildRuntime();
       runtime.channel.session.resolveStorePath = vi
         .fn()
-        .mockReturnValueOnce("/tmp/dm-account-store.json")
-        .mockReturnValueOnce("/tmp/dm-agent-store.json");
+        .mockReturnValueOnce(DM_ACCOUNT_STORE_PATH)
+        .mockReturnValueOnce(DM_AGENT_STORE_PATH);
       shared.getRuntimeMock.mockReturnValueOnce(runtime);
 
       await handleDingTalkMessage({
@@ -389,7 +396,7 @@ describe("inbound-handler quote handling", () => {
 
       expect(mockedUpsertInboundMessageContext).toHaveBeenCalledWith(
         expect.objectContaining({
-          storePath: "/tmp/dm-account-store.json",
+          storePath: DM_ACCOUNT_STORE_PATH,
           conversationId: "cid_dm_stable",
         }),
       );
@@ -404,8 +411,8 @@ describe("inbound-handler quote handling", () => {
       const runtime = buildRuntime();
       runtime.channel.session.resolveStorePath = vi
         .fn()
-        .mockReturnValueOnce("/tmp/dm-account-store.json")
-        .mockReturnValueOnce("/tmp/dm-agent-store.json");
+        .mockReturnValueOnce(DM_ACCOUNT_STORE_PATH)
+        .mockReturnValueOnce(DM_AGENT_STORE_PATH);
       shared.getRuntimeMock.mockReturnValueOnce(runtime);
       shared.extractMessageContentMock.mockReturnValueOnce({
         text: "我在讨论字符串 [引用消息:] 本身",
@@ -453,8 +460,8 @@ describe("inbound-handler quote handling", () => {
       const runtime = buildRuntime();
       runtime.channel.session.resolveStorePath = vi
         .fn()
-        .mockReturnValueOnce("/tmp/dm-account-store.json")
-        .mockReturnValueOnce("/tmp/dm-agent-store.json");
+        .mockReturnValueOnce(DM_ACCOUNT_STORE_PATH)
+        .mockReturnValueOnce(DM_AGENT_STORE_PATH);
       const log = {
         debug: vi.fn(),
         warn: vi.fn(),
@@ -503,8 +510,8 @@ describe("inbound-handler quote handling", () => {
       const runtime = buildRuntime();
       runtime.channel.session.resolveStorePath = vi
         .fn()
-        .mockReturnValueOnce("/tmp/dm-account-store.json")
-        .mockReturnValueOnce("/tmp/dm-agent-store.json");
+        .mockReturnValueOnce(DM_ACCOUNT_STORE_PATH)
+        .mockReturnValueOnce(DM_AGENT_STORE_PATH);
       shared.getRuntimeMock.mockReturnValueOnce(runtime);
       shared.extractMessageContentMock.mockReturnValueOnce({
         text: "你好世界",
@@ -549,11 +556,11 @@ describe("inbound-handler quote handling", () => {
       const runtime = buildRuntime();
       runtime.channel.session.resolveStorePath = vi
         .fn()
-        .mockReturnValueOnce("/tmp/store.json")
-        .mockReturnValueOnce("/tmp/agent-store.json");
+        .mockReturnValueOnce(STORE_PATH)
+        .mockReturnValueOnce(AGENT_STORE_PATH);
       shared.getRuntimeMock.mockReturnValueOnce(runtime);
       messageContextStore.upsertInboundMessageContext({
-        storePath: "/tmp/store.json",
+        storePath: STORE_PATH,
         accountId: "main",
         conversationId: "cid_ok",
         msgId: "orig_msg_002",
@@ -609,11 +616,11 @@ describe("inbound-handler quote handling", () => {
       const runtime = buildRuntime();
       runtime.channel.session.resolveStorePath = vi
         .fn()
-        .mockReturnValueOnce("/tmp/store.json")
-        .mockReturnValueOnce("/tmp/agent-store.json");
+        .mockReturnValueOnce(STORE_PATH)
+        .mockReturnValueOnce(AGENT_STORE_PATH);
       shared.getRuntimeMock.mockReturnValueOnce(runtime);
       messageContextStore.upsertOutboundMessageContext({
-        storePath: "/tmp/store.json",
+        storePath: STORE_PATH,
         accountId: "main",
         conversationId: "cid_ok",
         createdAt: baseTs - 1000,
@@ -667,11 +674,11 @@ describe("inbound-handler quote handling", () => {
       const runtime = buildRuntime();
       runtime.channel.session.resolveStorePath = vi
         .fn()
-        .mockReturnValueOnce("/tmp/store.json")
-        .mockReturnValueOnce("/tmp/agent-store.json");
+        .mockReturnValueOnce(STORE_PATH)
+        .mockReturnValueOnce(AGENT_STORE_PATH);
       shared.getRuntimeMock.mockReturnValueOnce(runtime);
       messageContextStore.upsertOutboundMessageContext({
-        storePath: "/tmp/store.json",
+        storePath: STORE_PATH,
         accountId: "main",
         conversationId: "cid_ok",
         createdAt: baseTs - 1000,
@@ -721,11 +728,11 @@ describe("inbound-handler quote handling", () => {
       const runtime = buildRuntime();
       runtime.channel.session.resolveStorePath = vi
         .fn()
-        .mockReturnValueOnce("/tmp/store.json")
-        .mockReturnValueOnce("/tmp/agent-store.json");
+        .mockReturnValueOnce(STORE_PATH)
+        .mockReturnValueOnce(AGENT_STORE_PATH);
       shared.getRuntimeMock.mockReturnValueOnce(runtime);
       messageContextStore.upsertInboundMessageContext({
-        storePath: "/tmp/store.json",
+        storePath: STORE_PATH,
         accountId: "main",
         conversationId: "cid_ok",
         msgId: "quoted_doc_1",
@@ -775,8 +782,8 @@ describe("inbound-handler quote handling", () => {
       const runtime = buildRuntime();
       runtime.channel.session.resolveStorePath = vi
         .fn()
-        .mockReturnValueOnce("/tmp/store.json")
-        .mockReturnValueOnce("/tmp/agent-store.json");
+        .mockReturnValueOnce(STORE_PATH)
+        .mockReturnValueOnce(AGENT_STORE_PATH);
       shared.getRuntimeMock.mockReturnValueOnce(runtime);
       shared.extractMessageContentMock.mockReturnValueOnce({
         text: "继续这个话题",
@@ -820,8 +827,8 @@ describe("inbound-handler quote handling", () => {
       const runtime = buildRuntime();
       runtime.channel.session.resolveStorePath = vi
         .fn()
-        .mockReturnValueOnce("/tmp/store.json")
-        .mockReturnValueOnce("/tmp/agent-store.json");
+        .mockReturnValueOnce(STORE_PATH)
+        .mockReturnValueOnce(AGENT_STORE_PATH);
       shared.getRuntimeMock.mockReturnValueOnce(runtime);
       shared.extractMessageContentMock.mockReturnValueOnce({
         text: "找不到引用",
@@ -866,11 +873,11 @@ describe("inbound-handler quote handling", () => {
       const runtime = buildRuntime();
       runtime.channel.session.resolveStorePath = vi
         .fn()
-        .mockReturnValueOnce("/tmp/store.json")
-        .mockReturnValueOnce("/tmp/agent-store.json");
+        .mockReturnValueOnce(STORE_PATH)
+        .mockReturnValueOnce(AGENT_STORE_PATH);
       shared.getRuntimeMock.mockReturnValueOnce(runtime);
       messageContextStore.upsertInboundMessageContext({
-        storePath: "/tmp/store.json",
+        storePath: STORE_PATH,
         accountId: "main",
         conversationId: "cid_ok",
         msgId: "chain_leaf_1",
@@ -880,7 +887,7 @@ describe("inbound-handler quote handling", () => {
         topic: null,
       });
       messageContextStore.upsertOutboundMessageContext({
-        storePath: "/tmp/store.json",
+        storePath: STORE_PATH,
         accountId: "main",
         conversationId: "cid_ok",
         createdAt: baseTs - 2000,
@@ -898,7 +905,7 @@ describe("inbound-handler quote handling", () => {
         },
       });
       messageContextStore.upsertInboundMessageContext({
-        storePath: "/tmp/store.json",
+        storePath: STORE_PATH,
         accountId: "main",
         conversationId: "cid_ok",
         msgId: "chain_head_1",
@@ -970,11 +977,11 @@ describe("inbound-handler quote handling", () => {
       const runtime = buildRuntime();
       runtime.channel.session.resolveStorePath = vi
         .fn()
-        .mockReturnValueOnce("/tmp/store.json")
-        .mockReturnValueOnce("/tmp/agent-store.json");
+        .mockReturnValueOnce(STORE_PATH)
+        .mockReturnValueOnce(AGENT_STORE_PATH);
       shared.getRuntimeMock.mockReturnValueOnce(runtime);
       messageContextStore.upsertOutboundMessageContext({
-        storePath: "/tmp/store.json",
+        storePath: STORE_PATH,
         accountId: "main",
         conversationId: "cid_ok",
         createdAt: baseTs - 1000,
@@ -992,7 +999,7 @@ describe("inbound-handler quote handling", () => {
         },
       });
       messageContextStore.upsertInboundMessageContext({
-        storePath: "/tmp/store.json",
+        storePath: STORE_PATH,
         accountId: "main",
         conversationId: "cid_ok",
         msgId: "cycle_head_1",
@@ -1058,8 +1065,8 @@ describe("inbound-handler quote handling", () => {
       const runtime = buildRuntime();
       runtime.channel.session.resolveStorePath = vi
         .fn()
-        .mockReturnValueOnce("/tmp/account-store.json")
-        .mockReturnValueOnce("/tmp/agent-store.json");
+        .mockReturnValueOnce(ACCOUNT_STORE_PATH)
+        .mockReturnValueOnce(AGENT_STORE_PATH);
       shared.getRuntimeMock.mockReturnValueOnce(runtime);
       shared.extractMessageContentMock.mockReturnValueOnce({
         text: "hello",
@@ -1119,8 +1126,8 @@ describe("inbound-handler quote handling", () => {
       const runtime = buildRuntime();
       runtime.channel.session.resolveStorePath = vi
         .fn()
-        .mockReturnValueOnce("/tmp/account-store.json")
-        .mockReturnValueOnce("/tmp/agent-store.json");
+        .mockReturnValueOnce(ACCOUNT_STORE_PATH)
+        .mockReturnValueOnce(AGENT_STORE_PATH);
       shared.getRuntimeMock.mockReturnValueOnce(runtime);
       shared.extractMessageContentMock.mockReturnValueOnce({
         text: "hello",
@@ -1216,7 +1223,7 @@ describe("inbound-handler quote handling", () => {
 
       expect(shared.resolveQuotedFileMock).toHaveBeenCalledTimes(1);
       const restored = messageContextStore.resolveByMsgId({
-        storePath: "/tmp/store.json",
+        storePath: STORE_PATH,
         accountId: "main",
         conversationId: "cid_group_1",
         msgId: "group_file_msg_1",
@@ -1232,7 +1239,7 @@ describe("inbound-handler quote handling", () => {
       shared.getRuntimeMock.mockReturnValueOnce(runtime);
       messageContextStore.clearMessageContextCacheForTest();
       messageContextStore.upsertInboundMessageContext({
-        storePath: "/tmp/store.json",
+        storePath: STORE_PATH,
         accountId: "main",
         conversationId: "cid_group_2",
         msgId: "file_origin",
@@ -1299,7 +1306,7 @@ describe("inbound-handler quote handling", () => {
       messageContextStore.clearMessageContextCacheForTest();
       // Set up cached doc card with stored filename
       messageContextStore.upsertInboundMessageContext({
-        storePath: "/tmp/store.json",
+        storePath: STORE_PATH,
         accountId: "main",
         conversationId: "cid_dm_cached_doc_name",
         msgId: "doc_origin_msg_cached_name",
@@ -1417,7 +1424,7 @@ describe("inbound-handler quote handling", () => {
         fileName: "fallback-name.sql",
       });
       const restored = messageContextStore.resolveByMsgId({
-        storePath: "/tmp/store.json",
+        storePath: STORE_PATH,
         accountId: "main",
         conversationId: "cid_group_name",
         msgId: "group_file_msg_name",
