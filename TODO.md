@@ -402,8 +402,8 @@
   - [x] [#175 docs: align README cardTemplateKey default](https://github.com/soimy/openclaw-channel-dingtalk/pull/175)（状态：合并）
   - [x] [#199 docs: align onboarding and runtime defaults](https://github.com/soimy/openclaw-channel-dingtalk/pull/199)（状态：合并）
 - [ ] 补 onboarding 示例
-- [ ] 跟进 `#537` 的 DingTalk Device Flow 自动注册 onboarding：确认最新简化流程、P2 review 建议与手动扫码/失败回退实机验证
-  - [ ] [#537 feat(onboarding): add DingTalk Device Flow auto-registration to setup wizard](https://github.com/soimy/openclaw-channel-dingtalk/pull/537)（状态：审核中（CI 通过，待手动验证））
+- [ ] 跟进 `#537` 的 DingTalk Device Flow 自动注册 onboarding：确认最新简化流程、多账号入口与英文提示修复、P2 review 建议，以及手动扫码/失败回退实机验证
+  - [ ] [#537 feat(onboarding): add DingTalk Device Flow auto-registration to setup wizard](https://github.com/soimy/openclaw-channel-dingtalk/pull/537)（状态：审核中（CI 通过，新增 English prompts/多账号入口修复，待手动验证））
 - [ ] 补配置说明
 - [ ] 补常见问题
 - [ ] 补排障说明
