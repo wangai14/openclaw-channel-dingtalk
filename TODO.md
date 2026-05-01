@@ -38,6 +38,8 @@
 
 ### 2. AI Card 发送链路一致性
 相关 Issues：
+- [#541 钉钉发送markdown格式消息混乱](https://github.com/soimy/openclaw-channel-dingtalk/issues/541)（状态：开启；最新评论指向钉钉 markdown 表格分隔行兼容性）
+- [#544 [问题反馈] 钉钉AI CARD发出来卡片为空](https://github.com/soimy/openclaw-channel-dingtalk/issues/544)（状态：开启；主动推送 card 流式过程可见、final 后空白，补充内置模板 ID / override 配置疑问）
 
 任务：
 - [ ] 回归 Done 提前结束问题
@@ -88,7 +90,7 @@
 - [ ] 复盘 `#363` 关闭未合并方案与当前主线差异，确认其风险点已被后续修复覆盖
   - [ ] [#363 fix(card): prevent duplicate cards and disable unused block streaming](https://github.com/soimy/openclaw-channel-dingtalk/pull/363)（状态：已关闭未合并）
 - [ ] 跟进 `#357` 升级后“卡片仅处理中”反馈，核对 `cardRealTimeStream` 默认值与迁移提示
-- [ ] 跟进 `#358` 的表格转换后续（是否移除历史 `convertMarkdownTablesToPlainText` 路径）并补跨端渲染回归
+- [ ] 跟进 `#358/#541` 的表格转换后续（是否移除历史 `convertMarkdownTablesToPlainText` 路径），补钉钉 markdown 表格分隔行提示与跨端渲染回归
 - [ ] 跟进 `#379` 的“上游返回 0 字节时钉钉前端无错误反馈”场景，明确插件侧兜底提示与日志建议（`/verbose on`）边界
 - [ ] 跟进 `#407` 的“card 模式下无回复 + ackReaction 不显示”现场，区分卡片发送链路异常与 thinking 反馈配置问题
 - [ ] （拟完成，请评估）跟进 `#513` 的 session-recovery 卡片冻结问题：当前已补 markdown fallback 兜底，仍需在 Anthropic thinking recovery 实机路径确认第二轮恢复后的最终用户观感
@@ -97,6 +99,7 @@
   - [ ] [#457 fix(card): unify reasoning-on and reasoning-stream block delivery](https://github.com/soimy/openclaw-channel-dingtalk/pull/457)（状态：审核中）
 - [ ] 跟进 `#543` 的同会话并发建卡 guard：复核“单卡片 + markdown 降级”路径、P2 review 建议与真机快速连发验证
   - [ ] [#543 fix(card): prevent duplicate card creation via synchronous in-flight guard](https://github.com/soimy/openclaw-channel-dingtalk/pull/543)（状态：审核中（CI 通过，Greptile 仅 P2 风格建议））
+- [ ] 跟进 `#544` 的主动推送 card final 空白问题：核对内置模板 ID 默认值、`BUILTIN_DINGTALK_CARD_TEMPLATE_ID` override 文档与内网钉钉模板差异，并补单聊主动推送回归
 - [ ] 复核 `#419` 关闭结论：确认“会话锁外提前建卡/空 Done 卡片”修复是否已入 `main`；若未落地，按最小补丁重提
   - [ ] [#418 fix: use dispatch counts to prevent empty "Done" card finalize](https://github.com/soimy/openclaw-channel-dingtalk/pull/418)（状态：已关闭未合并）
 
