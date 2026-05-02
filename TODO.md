@@ -39,7 +39,7 @@
 ### 2. AI Card 发送链路一致性
 相关 Issues：
 - [#541 钉钉发送markdown格式消息混乱](https://github.com/soimy/openclaw-channel-dingtalk/issues/541)（状态：开启；最新评论指向钉钉 markdown 表格分隔行兼容性）
-- [#544 [问题反馈] 钉钉AI CARD发出来卡片为空](https://github.com/soimy/openclaw-channel-dingtalk/issues/544)（状态：开启；主动推送 card 流式过程可见、final 后空白，补充内置模板 ID / override 配置疑问）
+- [#544 [问题反馈] 钉钉AI CARD发出来卡片为空](https://github.com/soimy/openclaw-channel-dingtalk/issues/544)（状态：已关闭（关联 PR #546，2026-05-01；仍需跟进 #548 streaming lifecycle 收口））
 
 任务：
 - [ ] 回归 Done 提前结束问题
@@ -99,7 +99,9 @@
   - [ ] [#457 fix(card): unify reasoning-on and reasoning-stream block delivery](https://github.com/soimy/openclaw-channel-dingtalk/pull/457)（状态：审核中）
 - [ ] 跟进 `#543` 的同会话并发建卡 guard：复核“单卡片 + markdown 降级”路径、P2 review 建议与真机快速连发验证
   - [ ] [#543 fix(card): prevent duplicate card creation via synchronous in-flight guard](https://github.com/soimy/openclaw-channel-dingtalk/pull/543)（状态：审核中（CI 通过，Greptile 仅 P2 风格建议））
-- [ ] 跟进 `#544` 的主动推送 card final 空白问题：核对内置模板 ID 默认值、`BUILTIN_DINGTALK_CARD_TEMPLATE_ID` override 文档与内网钉钉模板差异，并补单聊主动推送回归
+- [ ] 跟进 `#544` 的主动推送 card final 空白问题：`#546` 已修复 proactive card block finalize 并完成真机验证，继续复核 `#548` 对 opened streaming lifecycle 的终态收口
+  - [x] [#546 fix(card): finalize proactive cards with block variables](https://github.com/soimy/openclaw-channel-dingtalk/pull/546)（状态：合并）
+  - [ ] [#548 fix(card): finalize opened streaming lifecycle](https://github.com/soimy/openclaw-channel-dingtalk/pull/548)（状态：审核中（CI 通过，Greptile 未发现 P0/P1））
 - [ ] 复核 `#419` 关闭结论：确认“会话锁外提前建卡/空 Done 卡片”修复是否已入 `main`；若未落地，按最小补丁重提
   - [ ] [#418 fix: use dispatch counts to prevent empty "Done" card finalize](https://github.com/soimy/openclaw-channel-dingtalk/pull/418)（状态：已关闭未合并）
 
@@ -139,11 +141,12 @@
 
 ### 4. 图片 / 语音 / 媒体链路补强
 相关 Issues：
-- [#542 单条消息多张图片只收到第一张，mediaPaths 未处理](https://github.com/soimy/openclaw-channel-dingtalk/issues/542)（状态：开启）
+- [#542 单条消息多张图片只收到第一张，mediaPaths 未处理](https://github.com/soimy/openclaw-channel-dingtalk/issues/542)（状态：已关闭（关联 PR #545，2026-05-01））
 
 任务：
 - [ ] 回归本地图片发送
-- [ ] 跟进 `#542` 的富文本多图片入站链路：确认 `message-utils.ts` 已提取 `mediaPaths` 后，补 `inbound-handler.ts` 多媒体下载、上下文注入与回归用例
+- [ ] （拟完成，请评估）跟进 `#542` 的富文本多图片入站链路：`#545` 已补 `inbound-handler.ts` 多媒体下载、上下文注入、sub-agent/quote 恢复与回归用例，待一次实机多图确认
+  - [x] [#545 fix(inbound): download and pass all mediaPaths for multi-image rich text messages](https://github.com/soimy/openclaw-channel-dingtalk/pull/545)（状态：合并）
 - [ ] 回归语音消息发送
 - [ ] （拟完成，请评估）跟进 `#516` 的媒体类型判定回归：`.mp3` 默认按附件发送的修复已合入，仍需补一次 v3.5.3 升级后的文件/语音分流实机回归
   - [x] [#517 fix(media): default audio files to attachment instead of voice message](https://github.com/soimy/openclaw-channel-dingtalk/pull/517)（状态：合并）
@@ -246,7 +249,7 @@
 - [ ] 优化启动时报错
 - [ ] 补齐文档说明
 - [ ] 跟进 `#514` 的多账号 schema 报错反馈：issue 已关闭，当前重点转为补 `accounts.main/default` 形态、遗留 `corpId/robotCode` 字段与缓存命中旧 schema 的迁移说明
-- [ ] 跟进 `#528` 的 `clientSecret` SecretInput 支持：review 仍停留在要求修改，已补 trust boundary 文案、`maxLength` 与 file-source 测试，待 reviewer 翻转
+- [ ] 跟进 `#528` 的 `clientSecret` SecretInput 支持：已 rebase 到最新 `main` 并对齐 Device Flow onboarding 冲突，CI 通过；reviewDecision 仍为要求修改，待 maintainer/reviewer 复核翻转
   - [ ] [#528 feat: support SecretInput for DingTalk clientSecret](https://github.com/soimy/openclaw-channel-dingtalk/pull/528)（状态：要求修改）
 - [ ] 吸收 `#492` 的“同一机器人按用户路由到不同 agent”案例：补 `bindings.peer.id` / `direct` staffId 示例，并明确这属于框架 routing 能力而非插件新增特性
 - [ ] 跟进 `#460` 的多 agent 指令路由回归：复核 `#478` 在当前版本对 `@agent /new`、`@agent /stop` 与 `/reasoning stream` 的覆盖范围，并补最小复现与版本结论
@@ -399,14 +402,16 @@
 - [#498 telegram-core 模块缺失安装反馈](https://github.com/soimy/openclaw-channel-dingtalk/issues/498)（状态：已关闭（v3.5.3 已发布；剩余 qa-lab / install.runtime 噪音属上游 OpenClaw 打包问题；2026-04-25 自动关闭，可重开））
 - [#455 定时任务发送消息到指定群组](https://github.com/soimy/openclaw-channel-dingtalk/issues/455)（状态：已关闭（2026-04-26 自动关闭，可重开））
 - [#520 [问题反馈] message send action 运行时报错 jsonResult is not a function (SDK 版本兼容性)](https://github.com/soimy/openclaw-channel-dingtalk/issues/520)（状态：已关闭（升级到 openclaw >= 2026.4.5 可规避；2026-04-26 自动关闭，可重开））
+- [#532 请求支持扫码登录/扫码绑定功能](https://github.com/soimy/openclaw-channel-dingtalk/issues/532)（状态：已关闭（关联 PR #537，2026-05-01））
 
 任务：
 - [ ] （拟完成，请评估）补 README 截图
   - [x] [#175 docs: align README cardTemplateKey default](https://github.com/soimy/openclaw-channel-dingtalk/pull/175)（状态：合并）
   - [x] [#199 docs: align onboarding and runtime defaults](https://github.com/soimy/openclaw-channel-dingtalk/pull/199)（状态：合并）
 - [ ] 补 onboarding 示例
-- [ ] 跟进 `#537` 的 DingTalk Device Flow 自动注册 onboarding：确认最新简化流程、多账号入口与英文提示修复、P2 review 建议，以及手动扫码/失败回退实机验证
-  - [ ] [#537 feat(onboarding): add DingTalk Device Flow auto-registration to setup wizard](https://github.com/soimy/openclaw-channel-dingtalk/pull/537)（状态：审核中（CI 通过，新增 English prompts/多账号入口修复，待手动验证））
+- [ ] （拟完成，请评估）跟进 `#537` 的 DingTalk Device Flow 自动注册 onboarding：已合并并关闭扫码绑定诉求 `#532`，仍建议补一次手动扫码/失败回退实机验证
+  - [x] [#537 feat(onboarding): add DingTalk Device Flow auto-registration to setup wizard](https://github.com/soimy/openclaw-channel-dingtalk/pull/537)（状态：合并）
+  - [x] [#547 docs: sync user-facing docs with v3.6.0 features](https://github.com/soimy/openclaw-channel-dingtalk/pull/547)（状态：合并）
 - [ ] 补配置说明
 - [ ] 补常见问题
 - [ ] 补排障说明
@@ -419,7 +424,7 @@
   - [ ] [#337 refactor: deprecate legacy dingtalk debug config](https://github.com/soimy/openclaw-channel-dingtalk/pull/337)（状态：要求修改，已关闭未合并）
 - [ ] 增补“钉钉上游能力边界”FAQ：项目管理接口、文档表格编辑、消息输出类型限制（#293/#340/#342）
 - [ ] 增补“主动消息发送”FAQ 与前置条件（`robotCode`、会话预热、机器人类型权限、流式模式差异）（#144/#355）
-- [ ] 跟进 `#527` 的 `dingtalk-connector.*` Gateway RPC 兼容：确认 `send/status/probe` 的目标格式、`clientId` 暴露边界与 `messageId` fallback 语义后再决定是否合入
+- [ ] 跟进 `#527` 的 `dingtalk-connector.*` Gateway RPC 兼容：已 rebase 到最新 `main` 并解决 `index.ts` 冲突，CI 通过；继续复核目标格式、`clientId` 暴露边界与 `messageId` fallback 语义
   - [ ] [#527 feat: add DingTalk connector Gateway RPC compatibility](https://github.com/soimy/openclaw-channel-dingtalk/pull/527)（状态：审核中（CI 通过））
 - [ ] 增补“定时/主动发送到指定群”说明（`conversationId` 直发 + `displayNameResolution` 能力与版本门槛）（#376/#372）
 - [ ] 合并 `#455` 追问：补充 `cron/jobs.json` 中 `conversationId: group:cid...` 与 `session_key` 两种定向发送写法示例
