@@ -5,7 +5,7 @@ import {
   finalizeActiveCardsForAccount,
   recoverPendingCardsForAccount,
 } from "../card-service";
-import { resolveRobotCode } from "../config";
+import { resolveRobotCode, resolveRuntimeConfig } from "../config";
 import { ConnectionManager } from "../connection-manager";
 import { isMessageProcessed, markMessageProcessed } from "../dedup";
 import {
@@ -157,9 +157,6 @@ export function createDingTalkGateway(): NonNullable<DingTalkChannelPlugin["gate
     startAccount: async (ctx: GatewayStartContext): Promise<GatewayStopResult> => {
       const { account, cfg, abortSignal } = ctx;
       const config = account.config;
-      if (!config.clientId || !config.clientSecret) {
-        throw new Error("DingTalk clientId and clientSecret are required");
-      }
       let accountStorePath: string | undefined;
       try {
         const runtime = getDingTalkRuntime();
@@ -176,6 +173,10 @@ export function createDingTalkGateway(): NonNullable<DingTalkChannelPlugin["gate
         debug: config.debug,
         baseLog: ctx.log,
       });
+      // Stream credentials are resolved once per account start. If a file/exec
+      // SecretInput rotates, restart the gateway/account so reconnects use the
+      // new secret.
+      const runtimeConfig = await resolveRuntimeConfig(config, pluginLog);
       setCurrentLogger(pluginLog, account.accountId);
 
       pluginLog?.info?.(`[${account.accountId}] Initializing DingTalk Stream client...`);
@@ -212,10 +213,10 @@ export function createDingTalkGateway(): NonNullable<DingTalkChannelPlugin["gate
 
       const createStreamClient: StreamClientFactory = () => {
         const client = new DWClient({
-          clientId: config.clientId,
-          clientSecret: config.clientSecret,
-          debug: config.debug || false,
-          keepAlive: config.keepAlive ?? !useConnectionManager,
+          clientId: runtimeConfig.clientId,
+          clientSecret: runtimeConfig.clientSecret,
+          debug: runtimeConfig.debug || false,
+          keepAlive: runtimeConfig.keepAlive ?? !useConnectionManager,
         });
         (client as any).sslopts = {
           ...(client as any).sslopts,

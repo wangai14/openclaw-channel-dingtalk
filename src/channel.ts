@@ -9,6 +9,7 @@ import { dingtalkSetupAdapter, dingtalkSetupWizard } from "./onboarding.js";
 import { createDingTalkMessageActions } from "./messaging/channel-actions";
 import { createDingTalkOutbound } from "./messaging/channel-outbound";
 import { createDingTalkStatus } from "./platform/channel-status";
+import { hasConfiguredSecretInput } from "./secret-input";
 import {
   listDingTalkDirectoryGroups,
   listDingTalkDirectoryUsers,
@@ -54,7 +55,9 @@ export const dingtalkPlugin: DingTalkChannelPlugin = {
       const id = accountId || "default";
       const account = config.accounts?.[id];
       const resolvedConfig = account ? mergeAccountWithDefaults(config, account) : config;
-      const configured = Boolean(resolvedConfig.clientId && resolvedConfig.clientSecret);
+      const configured = Boolean(
+        resolvedConfig.clientId && hasConfiguredSecretInput(resolvedConfig.clientSecret),
+      );
       return {
         accountId: id,
         config: resolvedConfig,
@@ -65,7 +68,7 @@ export const dingtalkPlugin: DingTalkChannelPlugin = {
     },
     defaultAccountId: (): string => "default",
     isConfigured: (account: ResolvedAccount): boolean =>
-      Boolean(account.config?.clientId && account.config?.clientSecret),
+      Boolean(account.config?.clientId && hasConfiguredSecretInput(account.config?.clientSecret)),
     describeAccount: (account: ResolvedAccount) => ({
       accountId: account.accountId,
       name: account.config?.name || "DingTalk",

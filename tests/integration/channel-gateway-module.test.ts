@@ -92,6 +92,6 @@ describe("createDingTalkGateway", () => {
                 getStatus: () => ({}),
                 setStatus: vi.fn(),
             } as any),
-        ).rejects.toThrow("DingTalk clientId and clientSecret are required");
+        ).rejects.toThrow("DingTalk clientId and resolved clientSecret are required");
     });
 });

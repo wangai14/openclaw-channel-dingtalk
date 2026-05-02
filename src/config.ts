@@ -1,17 +1,13 @@
-import * as os from "node:os";
-import * as path from "node:path";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/core";
+import {
+  formatSecretInputResolutionFailure,
+  hasConfiguredSecretInput,
+  resolveDingTalkSecretConfig,
+} from "./secret-input";
 import type { DingTalkChannelConfig, DingTalkConfig } from "./types";
-
-const WINDOWS_ROOT_DIRECTORIES = new Set([
-  "Users",
-  "Program Files",
-  "Program Files (x86)",
-  "ProgramData",
-  "Windows",
-  "Documents and Settings",
-]);
+export { resolveRelativePath, resolveUserPath } from "./path-utils";
 const DEFAULT_LEARNING_NOTE_TTL_MS = 6 * 60 * 60 * 1000;
+export type RuntimeDingTalkConfig = Omit<DingTalkConfig, "clientSecret"> & { clientSecret: string };
 
 function normalizeLearningConfig(
   config: DingTalkConfig,
@@ -114,64 +110,25 @@ export function getConfig(cfg: OpenClawConfig, accountId?: string): DingTalkConf
 
 export function isConfigured(cfg: OpenClawConfig, accountId?: string): boolean {
   const config = getConfig(cfg, accountId);
-  return Boolean(config.clientId && config.clientSecret);
+  return Boolean(config.clientId && hasConfiguredSecretInput(config.clientSecret));
 }
 
-/**
- * Resolve relative paths against a base directory, with intelligent platform-specific handling.
- *
- * Supports:
- * - ~ and ~/ expansion to home directory
- * - Absolute paths (Unix: /path, Windows: \path or C:\path)
- * - Relative paths resolved against cwd
- * - Windows absolute paths without drive letters (e.g., Users\name\.openclaw\file.txt)
- * - Mixed path separators (/ and \)
- *
- * @param input - The path string to resolve
- * @returns The resolved absolute path
- */
-export function resolveRelativePath(input: string): string {
-  const trimmed = input.trim();
-  if (!trimmed) {
-    return trimmed;
+export async function resolveRuntimeConfig(
+  config: DingTalkConfig,
+  log?: { warn?: (message: string, data?: unknown) => void },
+): Promise<RuntimeDingTalkConfig> {
+  const resolved = await resolveDingTalkSecretConfig(config, log);
+  if (!resolved.clientId || !resolved.clientSecret) {
+    const secretFailure = resolved.clientSecretResolutionFailure
+      ? `: clientSecret resolution failed for ${formatSecretInputResolutionFailure(resolved.clientSecretResolutionFailure)}`
+      : "";
+    throw new Error(`DingTalk clientId and resolved clientSecret are required${secretFailure}`);
   }
-
-  const segments = (value: string): string[] => value.split(/[\\/]+/).filter(Boolean);
-  const pathSegments = segments(trimmed);
-  const firstSegment = pathSegments[0];
-
-  // Expand bare "~" and "~/" or "~\\" prefixes into the user home directory.
-  if (trimmed === "~") {
-    return path.resolve(os.homedir());
-  }
-  if (trimmed.startsWith("~/") || trimmed.startsWith("~\\")) {
-    return path.resolve(os.homedir(), ...segments(trimmed.slice(2)));
-  }
-
-  if (process.platform === "win32") {
-    // On Windows, OpenClaw may drop the leading "\" from root-based paths like
-    // "Users\name\.openclaw\workspace\file.xlsx". Only recover paths that start
-    // with well-known root directories to avoid misclassifying ordinary relative paths.
-    if (/^[a-zA-Z]:[\\/]/.test(trimmed)) {
-      return path.win32.normalize(trimmed);
-    }
-    if (firstSegment && /^[a-zA-Z]:$/.test(firstSegment)) {
-      return path.win32.resolve(`${firstSegment}\\`, ...pathSegments.slice(1));
-    }
-    if (firstSegment && WINDOWS_ROOT_DIRECTORIES.has(firstSegment)) {
-      return path.win32.resolve("\\", ...pathSegments);
-    }
-  }
-  // Treat both "/" and "\\" as absolute root prefixes for cross-platform input.
-  if (/^[\\/]/.test(trimmed)) {
-    return path.resolve(path.sep, ...pathSegments);
-  }
-
-  // Resolve relative path against cwd; supports mixed separators and "..\\..".
-  return path.resolve(process.cwd(), ...pathSegments);
+  return {
+    ...resolved,
+    clientSecret: resolved.clientSecret,
+  };
 }
-
-export const resolveUserPath = resolveRelativePath;
 
 /**
  * Resolve the robot code used by DingTalk APIs.
@@ -363,7 +320,7 @@ export function resolveDingTalkAccount(
     return {
       ...config,
       accountId: id,
-      configured: Boolean(config.clientId && config.clientSecret),
+      configured: Boolean(config.clientId && hasConfiguredSecretInput(config.clientSecret)),
     };
   }
 
@@ -377,7 +334,7 @@ export function resolveDingTalkAccount(
     return {
       ...publicMerged,
       accountId: id,
-      configured: Boolean(merged.clientId && merged.clientSecret),
+      configured: Boolean(merged.clientId && hasConfiguredSecretInput(merged.clientSecret)),
     };
   }
 
