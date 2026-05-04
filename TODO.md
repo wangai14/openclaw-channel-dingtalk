@@ -30,6 +30,8 @@
 - [ ] 合并核对 `#345` 新反馈（markdown 模式也出现间歇性丢回复），确认是否与连接层问题同源
 - [ ] 汇总 `#104` 最新反馈中“群聊需 @ 才稳定触发”的现象，区分上游丢消息与群聊触发条件导致的假阳性
 - [ ] 跟进 `#373` 的版本升级回归（3.2 -> 3.4.0）与日志采样，新增“连接到内网地址”证据，确认是否与 `#104/#345` 同源
+- [ ] 跟进 `#550` 的 IPv6 路由异常可选强制 IPv4 方案：确认 `OPENCLAW_DINGTALK_FORCE_IPV4=1` 对 sendBySession 超时现场有效，并补充 keepAlive 与 IPv4 选项耦合说明
+  - [ ] [#550 fix(http): allow opt-in IPv4-only HTTP agent for IPv6-broken environments](https://github.com/soimy/openclaw-channel-dingtalk/pull/550)（状态：审核中（CI 通过，Greptile 仅 P2 风格建议））
 - [x] 跟进 `#390` 的 callback ack 时序修复方案，补齐 `no-dedupKey` 与 in-flight 分支 ACK 行为一致性回归
   - [x] [#392 fix: acknowledge DingTalk callback immediately to prevent redelivery](https://github.com/soimy/openclaw-channel-dingtalk/pull/392)（状态：合并）
 - [x] 跟进终态 FAILED 后 `waitForStop` 卡死导致无法自动恢复的问题，并确认修复已落地
@@ -39,7 +41,9 @@
 ### 2. AI Card 发送链路一致性
 相关 Issues：
 - [#541 钉钉发送markdown格式消息混乱](https://github.com/soimy/openclaw-channel-dingtalk/issues/541)（状态：开启；最新评论指向钉钉 markdown 表格分隔行兼容性）
-- [#544 [问题反馈] 钉钉AI CARD发出来卡片为空](https://github.com/soimy/openclaw-channel-dingtalk/issues/544)（状态：已关闭（关联 PR #546，2026-05-01；仍需跟进 #548 streaming lifecycle 收口））
+- [#538 [问题反馈] 当 assistant message 只有 thinking 无 text 时，channel 静默丢弃，用户无感知](https://github.com/soimy/openclaw-channel-dingtalk/issues/538)（状态：开启；维护者要求先用 v3.6.1 复测）
+- [#544 [问题反馈] 钉钉AI CARD发出来卡片为空](https://github.com/soimy/openclaw-channel-dingtalk/issues/544)（状态：已关闭（关联 PR #546/#548，2026-05-01））
+- [#551 [问题反馈] AI card 流式重复更新+合并bug，以及附带一个自己发现的图文并茂发送方式](https://github.com/soimy/openclaw-channel-dingtalk/issues/551)（状态：开启；涉及 AI Card 已流式内容二次慢速流式与图片重复）
 
 任务：
 - [ ] 回归 Done 提前结束问题
@@ -97,19 +101,18 @@
   - [x] [#518 fix(card): deliver markdown fallback when session-recovery updates a finished card](https://github.com/soimy/openclaw-channel-dingtalk/pull/518)（状态：合并）
 - [ ] 跟进 `#457` 对 `/reasoning on` 与 `/reasoning stream` 的统一交付方案，确认多轮 assistant turn 与 finalize 边界在 card 模式稳定
   - [ ] [#457 fix(card): unify reasoning-on and reasoning-stream block delivery](https://github.com/soimy/openclaw-channel-dingtalk/pull/457)（状态：审核中）
-- [ ] 跟进 `#543` 的同会话并发建卡 guard：复核“单卡片 + markdown 降级”路径、P2 review 建议与真机快速连发验证
-  - [ ] [#543 fix(card): prevent duplicate card creation via synchronous in-flight guard](https://github.com/soimy/openclaw-channel-dingtalk/pull/543)（状态：审核中（CI 通过，Greptile 仅 P2 风格建议））
-- [ ] 跟进 `#544` 的主动推送 card final 空白问题：`#546` 已修复 proactive card block finalize 并完成真机验证，继续复核 `#548` 对 opened streaming lifecycle 的终态收口
+- [ ] （拟完成，请评估）跟进 `#543` 的同会话并发建卡 guard：`#543` 已合并并补同步 in-flight guard、markdown 降级与并发回归，待一次真机快速连发验证
+  - [x] [#543 fix(card): prevent duplicate card creation via synchronous in-flight guard](https://github.com/soimy/openclaw-channel-dingtalk/pull/543)（状态：合并）
+- [ ] （拟完成，请评估）跟进 `#544` 的主动推送 card final 空白问题：`#546/#548` 已修复 proactive block finalize 与 opened streaming lifecycle，待一次主动推送 + 打开态流式卡片真机回归
   - [x] [#546 fix(card): finalize proactive cards with block variables](https://github.com/soimy/openclaw-channel-dingtalk/pull/546)（状态：合并）
-  - [ ] [#548 fix(card): finalize opened streaming lifecycle](https://github.com/soimy/openclaw-channel-dingtalk/pull/548)（状态：审核中（CI 通过，Greptile 未发现 P0/P1））
+  - [x] [#548 fix(card): finalize opened streaming lifecycle](https://github.com/soimy/openclaw-channel-dingtalk/pull/548)（状态：合并）
+- [ ] 跟进 `#538` 的 thinking-only assistant message 静默丢弃：先用 v3.6.1 复测；若仍可复现，评估 thinking 降级为 text 或显式“模型输出格式异常”提示，避免用户无感知
+- [ ] 跟进 `#551` 的 AI Card 二次流式/合并回归：复核长输出与 Markdown 图片 `file://` 场景下是否重复追加内容和重复发送图片，明确终态富文本渲染与最终块合并策略
 - [ ] 复核 `#419` 关闭结论：确认“会话锁外提前建卡/空 Done 卡片”修复是否已入 `main`；若未落地，按最小补丁重提
   - [ ] [#418 fix: use dispatch counts to prevent empty "Done" card finalize](https://github.com/soimy/openclaw-channel-dingtalk/pull/418)（状态：已关闭未合并）
 
 ### 3. 文件上传 / 文件读取 / 文件预览 / 大文件链路
 相关 Issues：
-- [#422 机器人无法发送文件的问题](https://github.com/soimy/openclaw-channel-dingtalk/issues/422)（状态：已关闭（2026-04-25 自动关闭，可重开））
-- [#430 群聊怎么给openclaw发文件呢?](https://github.com/soimy/openclaw-channel-dingtalk/issues/430)（状态：已关闭（2026-04-26 自动关闭，可重开））
-- [#482 [Bug] v3.5.1 发送文件到钉钉时文件名显示为 #fileName# 而非实际文件名](https://github.com/soimy/openclaw-channel-dingtalk/issues/482)（状态：已关闭（2026-04-26 自动关闭，可重开））
 
 任务：
 - [ ] 核对基础文件发送能力的当前边界
@@ -240,7 +243,6 @@
 ### 8. 多账号 / 多 agent / schema 与路由配置收敛
 相关 Issues：
 - [#460 [问题反馈] 多agent模式下, 通过@助手 /new /stop 等执行失败](https://github.com/soimy/openclaw-channel-dingtalk/issues/460)（状态：已关闭（2026-04-29 自动关闭，可重开））
-- [#492 可以支持不同的人，通过同一个钉钉机器人，会话绑定到不同的agent里吗？](https://github.com/soimy/openclaw-channel-dingtalk/issues/492)（状态：已关闭（2026-04-26 自动关闭，可重开））
 - [#530 [功能建议] 刚需，多agent协同办公](https://github.com/soimy/openclaw-channel-dingtalk/issues/530)（状态：已关闭（2026-04-29 自动关闭，可重开））
 
 任务：
@@ -249,8 +251,8 @@
 - [ ] 优化启动时报错
 - [ ] 补齐文档说明
 - [ ] 跟进 `#514` 的多账号 schema 报错反馈：issue 已关闭，当前重点转为补 `accounts.main/default` 形态、遗留 `corpId/robotCode` 字段与缓存命中旧 schema 的迁移说明
-- [ ] 跟进 `#528` 的 `clientSecret` SecretInput 支持：已 rebase 到最新 `main` 并对齐 Device Flow onboarding 冲突，CI 通过；reviewDecision 仍为要求修改，待 maintainer/reviewer 复核翻转
-  - [ ] [#528 feat: support SecretInput for DingTalk clientSecret](https://github.com/soimy/openclaw-channel-dingtalk/pull/528)（状态：要求修改）
+- [ ] （拟完成，请评估）跟进 `#528` 的 `clientSecret` SecretInput 支持：已合并并补 env/file/exec 文档、占位符校验、配置态与 onboarding 回归，待发布后配置迁移验证
+  - [x] [#528 feat: support SecretInput for DingTalk clientSecret](https://github.com/soimy/openclaw-channel-dingtalk/pull/528)（状态：合并）
 - [ ] 吸收 `#492` 的“同一机器人按用户路由到不同 agent”案例：补 `bindings.peer.id` / `direct` staffId 示例，并明确这属于框架 routing 能力而非插件新增特性
 - [ ] 跟进 `#460` 的多 agent 指令路由回归：复核 `#478` 在当前版本对 `@agent /new`、`@agent /stop` 与 `/reasoning stream` 的覆盖范围，并补最小复现与版本结论
 - [ ] 区分 `#530` 的“用户直接 @agent 路由”与“Agent 间自主通信并回写群聊”两类诉求，明确前者已有能力边界、后者是否需要新的编排/回传方案
@@ -294,8 +296,6 @@
 
 ### 9. 支持群聊 @人 / @all
 相关 Issues：
-- [#353 如何让龙虾在群里中@其他成员](https://github.com/soimy/openclaw-channel-dingtalk/issues/353)（状态：已关闭（2026-04-25 自动关闭，可重开））
-- [#417 在钉钉群里，@机器人后让他生成图片发群里，结果发了一条全员钉钉通知](https://github.com/soimy/openclaw-channel-dingtalk/issues/417)（状态：已关闭（2026-04-25 自动关闭，可重开））
 - [#522 [功能建议] AI Card支持@User响应](https://github.com/soimy/openclaw-channel-dingtalk/issues/522)（状态：已关闭（2026-04-28 自动关闭，可重开））
 
 任务：
@@ -331,7 +331,6 @@
 
 ### 11. AI Card usage footer / thinking 展示行为可配置
 相关 Issues：
-- [#424 新版本的思考状态导致/verbose on模式无法查看工作链路，整体思考体验变慢](https://github.com/soimy/openclaw-channel-dingtalk/issues/424)（状态：已关闭（2026-04-25 自动关闭，可重开））
 
 任务：
 - [ ] 明确 thinking 展示可配置项
@@ -381,7 +380,6 @@
 
 ### 12. 流式与响应时延
 相关 Issues：
-- [#414 安装新版本发现在 markdown模式下，消息不按照 block 发送，而是全部完成后发送](https://github.com/soimy/openclaw-channel-dingtalk/issues/414)（状态：已关闭（2026-04-26 自动关闭，可重开））
 
 任务：
 - [ ] 评估 20 秒延迟是否仅在超大规模部署下发生
@@ -399,9 +397,6 @@
 
 ### 13. README / 截图 / onboarding / 配置说明补齐
 相关 Issues：
-- [#498 telegram-core 模块缺失安装反馈](https://github.com/soimy/openclaw-channel-dingtalk/issues/498)（状态：已关闭（v3.5.3 已发布；剩余 qa-lab / install.runtime 噪音属上游 OpenClaw 打包问题；2026-04-25 自动关闭，可重开））
-- [#455 定时任务发送消息到指定群组](https://github.com/soimy/openclaw-channel-dingtalk/issues/455)（状态：已关闭（2026-04-26 自动关闭，可重开））
-- [#520 [问题反馈] message send action 运行时报错 jsonResult is not a function (SDK 版本兼容性)](https://github.com/soimy/openclaw-channel-dingtalk/issues/520)（状态：已关闭（升级到 openclaw >= 2026.4.5 可规避；2026-04-26 自动关闭，可重开））
 - [#532 请求支持扫码登录/扫码绑定功能](https://github.com/soimy/openclaw-channel-dingtalk/issues/532)（状态：已关闭（关联 PR #537，2026-05-01））
 
 任务：
@@ -424,8 +419,8 @@
   - [ ] [#337 refactor: deprecate legacy dingtalk debug config](https://github.com/soimy/openclaw-channel-dingtalk/pull/337)（状态：要求修改，已关闭未合并）
 - [ ] 增补“钉钉上游能力边界”FAQ：项目管理接口、文档表格编辑、消息输出类型限制（#293/#340/#342）
 - [ ] 增补“主动消息发送”FAQ 与前置条件（`robotCode`、会话预热、机器人类型权限、流式模式差异）（#144/#355）
-- [ ] 跟进 `#527` 的 `dingtalk-connector.*` Gateway RPC 兼容：已 rebase 到最新 `main` 并解决 `index.ts` 冲突，CI 通过；继续复核目标格式、`clientId` 暴露边界与 `messageId` fallback 语义
-  - [ ] [#527 feat: add DingTalk connector Gateway RPC compatibility](https://github.com/soimy/openclaw-channel-dingtalk/pull/527)（状态：审核中（CI 通过））
+- [ ] 跟进 `#527` 的 `dingtalk-connector.*` Gateway RPC 兼容：已补兼容边界说明、严格 `messageId`、target 校验、`clientId` 脱敏与 warn 日志，CI 通过；reviewDecision 仍为要求修改，待 maintainer 复核翻转
+  - [ ] [#527 feat: add DingTalk connector Gateway RPC compatibility](https://github.com/soimy/openclaw-channel-dingtalk/pull/527)（状态：要求修改（review follow-up 已补，CI 通过））
 - [ ] 增补“定时/主动发送到指定群”说明（`conversationId` 直发 + `displayNameResolution` 能力与版本门槛）（#376/#372）
 - [ ] 合并 `#455` 追问：补充 `cron/jobs.json` 中 `conversationId: group:cid...` 与 `session_key` 两种定向发送写法示例
 - [ ] （拟完成，请评估）跟进 `#519` 的 CLI 子命令加载噪音：循环依赖已拆除，待补一次发布后 CLI 子命令真实安装路径回归确认噪音已消失
