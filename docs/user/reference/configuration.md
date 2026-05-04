@@ -24,7 +24,7 @@
 | `journalTTLDays` | number | `7` | 引用回溯日志保留天数 |
 | `ackReaction` | string | - | 原生处理中表情反馈 |
 | `messageType` | string | `markdown` | 回复模式：`markdown` 或 `card` |
-| `cardTemplateId` | string | - | AI 卡片模板 ID |
+| `cardTemplateId` | string | - | 已弃用。AI 卡片模板 ID 由预置模板固定，如需覆盖可通过环境变量 `DINGTALK_CARD_TEMPLATE_ID` |
 | `cardTemplateKey` | string | `content` | 卡片内容字段名 |
 | `cardStreamingMode` | string | `off`（生效值） | 卡片流式模式：`off` / `answer` / `all` |
 | `cardStreamInterval` | number | `1000` | 卡片实时更新节奏（毫秒，最小 `200`） |
