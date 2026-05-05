@@ -10,33 +10,31 @@
 相关 Issues：
 
 任务：
-- [ ] （拟完成，请评估）复核现有稳定性问题是否仍可复现
+- [ ] 跟进 `#550` 的 IPv6 路由异常排障方案：维护者倾向先用 `NODE_OPTIONS=--dns-result-order=ipv4first`、resolver/代理等宿主机层处理，暂不在插件层新增 `OPENCLAW_DINGTALK_FORCE_IPV4` API；优先沉淀 troubleshooting 文档，若更多环境反复出现再评估代码兜底
+  - [ ] [#550 fix(http): allow opt-in IPv4-only HTTP agent for IPv6-broken environments](https://github.com/soimy/openclaw-channel-dingtalk/pull/550)（状态：审核中（维护者倾向暂不合并代码；CI 通过，Greptile 仅 P2 风格建议））
+
+<details>
+<summary>已完成：</summary>
+  
+- [x] 复核现有稳定性问题是否仍可复现
   - [x] [#96 fix(dingtalk): harden inbound message handling](https://github.com/soimy/openclaw-channel-dingtalk/pull/96)（状态：合并）
   - [x] [#167 fix(dingtalk): clean up heartbeat timer on reconnect](https://github.com/soimy/openclaw-channel-dingtalk/pull/167)（状态：合并）
   - [x] [#183 fix(dingtalk): add stale lock cleanup on send path](https://github.com/soimy/openclaw-channel-dingtalk/pull/183)（状态：合并）
   - [x] [#249 improve DingTalk connection troubleshooting](https://github.com/soimy/openclaw-channel-dingtalk/pull/249)（状态：合并）
-- [ ] 明确各已合并 PR 的覆盖范围与遗漏场景
-- [ ] 建立最小回归用例：常规收发、长待机后收发、断线恢复、连接失败排障
-- [ ] 形成“已收敛 / 未收敛 / 需新增 issue”结论
 - [x] 验证 `#313` 在“冷启动后立即主动发送”场景的稳定性
   - [x] [#313 fix: lazy-preload peer ID registry to fix 400 errors in delivery queue](https://github.com/soimy/openclaw-channel-dingtalk/pull/313)（状态：合并）
-- [ ] 收敛 `#302/#303` 的复现路径与排障步骤
 - [x] 验证 `#323/#325` 后长待机与恢复窗口是否仍出现“间歇性收不到消息”（关联 `#104` 新增反馈）
   - [x] [#323 fix: increase health check interval/grace to prevent reconnect storm](https://github.com/soimy/openclaw-channel-dingtalk/pull/323)（状态：合并）
   - [x] [#325 test(connection-manager): align health check timings with new 60s/30s constants](https://github.com/soimy/openclaw-channel-dingtalk/pull/325)（状态：合并）
-- [ ] 结合 `#104` 新评论（指向 stream-sdk-nodejs#13）补充“连接存活但收不到入站事件”的链路级排查与可观测性
-- [ ] 复核 `#336` 在低流量静默群聊下是否消除“空闲误重连”，并确认不影响真实断链恢复
-  - [ ] [#336 fix: avoid idle reconnects on quiet DingTalk stream connections](https://github.com/soimy/openclaw-channel-dingtalk/pull/336)（状态：要求修改，已关闭未合并）
-- [ ] 合并核对 `#345` 新反馈（markdown 模式也出现间歇性丢回复），确认是否与连接层问题同源
-- [ ] 汇总 `#104` 最新反馈中“群聊需 @ 才稳定触发”的现象，区分上游丢消息与群聊触发条件导致的假阳性
-- [ ] 跟进 `#373` 的版本升级回归（3.2 -> 3.4.0）与日志采样，新增“连接到内网地址”证据，确认是否与 `#104/#345` 同源
-- [ ] 跟进 `#550` 的 IPv6 路由异常排障方案：维护者倾向先用 `NODE_OPTIONS=--dns-result-order=ipv4first`、resolver/代理等宿主机层处理，暂不在插件层新增 `OPENCLAW_DINGTALK_FORCE_IPV4` API；优先沉淀 troubleshooting 文档，若更多环境反复出现再评估代码兜底
-  - [ ] [#550 fix(http): allow opt-in IPv4-only HTTP agent for IPv6-broken environments](https://github.com/soimy/openclaw-channel-dingtalk/pull/550)（状态：审核中（维护者倾向暂不合并代码；CI 通过，Greptile 仅 P2 风格建议））
+- [x] 复核 `#336` 在低流量静默群聊下是否消除“空闲误重连”，并确认不影响真实断链恢复
+  - [x] [#336 fix: avoid idle reconnects on quiet DingTalk stream connections](https://github.com/soimy/openclaw-channel-dingtalk/pull/336)（状态：要求修改，已关闭未合并）
 - [x] 跟进 `#390` 的 callback ack 时序修复方案，补齐 `no-dedupKey` 与 in-flight 分支 ACK 行为一致性回归
   - [x] [#392 fix: acknowledge DingTalk callback immediately to prevent redelivery](https://github.com/soimy/openclaw-channel-dingtalk/pull/392)（状态：合并）
 - [x] 跟进终态 FAILED 后 `waitForStop` 卡死导致无法自动恢复的问题，并确认修复已落地
   - [x] [#399 fix: resolve waitForStop on terminal FAILED state](https://github.com/soimy/openclaw-channel-dingtalk/pull/399)（状态：合并）
 - [x] 同步 `#400` 已关闭结论（关联 `#399`），后续仅保留旧版本存量告警观察
+
+</details>
 
 ### 2. AI Card 发送链路一致性
 相关 Issues：
@@ -48,16 +46,26 @@
 - [#534 [Bug] AI Card 消息 finalize 延迟 5-10 秒，期间 gateway 日志无任何记录](https://github.com/soimy/openclaw-channel-dingtalk/issues/534)（状态：已关闭（关联 PR #548，2026-05-04））
 
 任务：
-- [ ] 回归 Done 提前结束问题
-- [ ] 回归空回复问题
-- [ ] 回归主动通知内容异常问题
-- [ ] 回归重复输出问题
-- [ ] 判断剩余问题是否需要拆出新的修复任务
-- [ ] 回归 `sessionWebhook` 过期后的 fallback 发送路径（#319）
+- [ ] 复盘 `#363` 关闭未合并方案与当前主线差异，确认其风险点已被后续修复覆盖
+  - [ ] [#363 fix(card): prevent duplicate cards and disable unused block streaming](https://github.com/soimy/openclaw-channel-dingtalk/pull/363)（状态：已关闭未合并）
+- [ ] 跟进 `#357` 升级后“卡片仅处理中”反馈，核对 `cardRealTimeStream` 默认值与迁移提示
+- [ ] 跟进 `#358/#541` 的表格转换后续（是否移除历史 `convertMarkdownTablesToPlainText` 路径），补钉钉 markdown 表格分隔行提示与跨端渲染回归
+- [ ] 跟进 `#379` 的“上游返回 0 字节时钉钉前端无错误反馈”场景，明确插件侧兜底提示与日志建议（`/verbose on`）边界
+- [ ] 跟进 `#407` 的“card 模式下无回复 + ackReaction 不显示”现场，区分卡片发送链路异常与 thinking 反馈配置问题
+- [ ] 跟进 `#538` 的 thinking-only assistant message 静默丢弃：先用 v3.6.1 复测；若仍可复现，评估 thinking 降级为 text 或显式“模型输出格式异常”提示，避免用户无感知
+- [ ] 跟进 `#551` 的 AI Card 二次流式/合并回归：复核长输出与 Markdown 图片 `file://` 场景下是否重复追加内容和重复发送图片，评估“下方最终块改为普通富文本或移除二次 AI 流式块”的模板策略，并确认自定义卡片模板变量说明是否足够支撑用户侧实验
+- [ ] 复核 `#419` 关闭结论：确认“会话锁外提前建卡/空 Done 卡片”修复是否已入 `main`；若未落地，按最小补丁重提
+  - [ ] [#418 fix: use dispatch counts to prevent empty "Done" card finalize](https://github.com/soimy/openclaw-channel-dingtalk/pull/418)（状态：已关闭未合并）
+
+<details>
+<summary>已完成：</summary>
+
+- [x] 跟进 `#457` 对 `/reasoning on` 与 `/reasoning stream` 的统一交付方案，确认多轮 assistant turn 与 finalize 边界在 card 模式稳定
+  - [x] [#457 fix(card): unify reasoning-on and reasoning-stream block delivery](https://github.com/soimy/openclaw-channel-dingtalk/pull/457)（状态：审核中）
 - [x] 回归媒体消息 `仅媒体/仅文本/媒体+文本` 的 deliver 组合行为（#321/#311）
   - [x] [#311 fix: deliver MEDIA attachments in inbound reply handler](https://github.com/soimy/openclaw-channel-dingtalk/pull/311)（状态：合并）
-- [ ] 评估并实现 `card.stream` 节流/合并策略，降低限流风险（#318）
-  - [ ] [#179 hardening send path](https://github.com/soimy/openclaw-channel-dingtalk/pull/179)（状态：要求修改，已关闭未合并）
+- [x] 评估并实现 `card.stream` 节流/合并策略，降低限流风险（#318）
+  - [x] [#179 hardening send path](https://github.com/soimy/openclaw-channel-dingtalk/pull/179)（状态：要求修改，已关闭未合并）
   - [x] [#191 serialize send pipeline with session-scoped dispatch lock](https://github.com/soimy/openclaw-channel-dingtalk/pull/191)（状态：合并）
 - [x] 复核 reasoning 重复堆叠修复是否稳定（#290/#291）
   - [x] [#291 fix(card): use replace mode for reasoning stream to prevent content duplication](https://github.com/soimy/openclaw-channel-dingtalk/pull/291)（状态：合并）
@@ -75,14 +83,13 @@
 - [x] 校验 `#300/#335` 的 markdown 表格兼容策略与默认值，避免不同钉钉客户端表现分叉
   - [x] [#300 feat(dingtalk): 优化 Markdown 表格发送兼容性](https://github.com/soimy/openclaw-channel-dingtalk/pull/300)（状态：合并）
   - [x] [#335 feat: add convertMarkdownTables config option](https://github.com/soimy/openclaw-channel-dingtalk/pull/335)（状态：合并）
-- [ ] 基于 `#198/#292` 复核“工具流发送失败不应中断后续正文回复”的错误分级与降级路径
-- [ ] 跟进 `#396` 内置卡片模板与停止按钮方案，复核其与 `message-context-store` 主路径的一致性后再决定合入
-  - [ ] [#396 feat(card): built-in AI card template with stop button support](https://github.com/soimy/openclaw-channel-dingtalk/pull/396)（状态：已关闭未合并）
+- [x] 跟进 `#396` 内置卡片模板与停止按钮方案，复核其与 `message-context-store` 主路径的一致性后再决定合入
+  - [x] [#396 feat(card): built-in AI card template with stop button support](https://github.com/soimy/openclaw-channel-dingtalk/pull/396)（状态：已关闭未合并）
 - [x] 跟进 `#444` 重提的内置卡片模板 + 停止按钮方案，当前已合并入 `main`，后续重点转向与 v2 草稿方案的重叠收敛
   - [x] [#444 feat(card): built-in AI card template with stop button support](https://github.com/soimy/openclaw-channel-dingtalk/pull/444)（状态：合并）
-- [ ] 跟进 `#448/#480` 的 AI Card v2 结构化 `CardBlock[]` 草稿方案，评估其与 `#444` 的重叠/替代关系后再决定推进路径
-  - [ ] [#448 refactor: AI Card v2 — structured CardBlock[] with preset template](https://github.com/soimy/openclaw-channel-dingtalk/pull/448)（状态：新（草稿））
-  - [ ] [#480 feat(card): implement card template v2 with rich block content and action btns](https://github.com/soimy/openclaw-channel-dingtalk/pull/480)（状态：审核中（review follow-up 已补，待复核；CI 通过））
+- [x] 跟进 `#448/#480` 的 AI Card v2 结构化 `CardBlock[]` 草稿方案，评估其与 `#444` 的重叠/替代关系后再决定推进路径
+  - [x] [#448 refactor: AI Card v2 — structured CardBlock[] with preset template](https://github.com/soimy/openclaw-channel-dingtalk/pull/448)（状态：新（草稿））
+  - [x] [#480 feat(card): implement card template v2 with rich block content and action btns](https://github.com/soimy/openclaw-channel-dingtalk/pull/480)（状态：审核中（review follow-up 已补，待复核；CI 通过））
 - [x] 跟进 `#427` 文本停止指令 pre-lock bypass 方案，补“空确认文本兜底 + 多次 deliver 文本选取”回归后再评估合入
   - [x] [#427 feat: bypass session lock for real-time stop command support](https://github.com/soimy/openclaw-channel-dingtalk/pull/427)（状态：合并）
 - [x] 跟进 AI Card finalize 收尾修复并回归“多轮 tool + final chunk + 首行重复”组合场景（#348/#350/#352）
@@ -93,27 +100,17 @@
   - [x] [#361 fix(markdown): disable block streaming in markdown mode to prevent split messages](https://github.com/soimy/openclaw-channel-dingtalk/pull/361)（状态：合并）
 - [x] 复核 `#368` reply strategy 重构后 card/markdown 投递行为与动态 reaction 装饰器兼容性
   - [x] [#368 refactor: extract ReplyStrategy interface for streaming reply dispatch](https://github.com/soimy/openclaw-channel-dingtalk/pull/368)（状态：合并）
-- [ ] 复盘 `#363` 关闭未合并方案与当前主线差异，确认其风险点已被后续修复覆盖
-  - [ ] [#363 fix(card): prevent duplicate cards and disable unused block streaming](https://github.com/soimy/openclaw-channel-dingtalk/pull/363)（状态：已关闭未合并）
-- [ ] 跟进 `#357` 升级后“卡片仅处理中”反馈，核对 `cardRealTimeStream` 默认值与迁移提示
-- [ ] 跟进 `#358/#541` 的表格转换后续（是否移除历史 `convertMarkdownTablesToPlainText` 路径），补钉钉 markdown 表格分隔行提示与跨端渲染回归
-- [ ] 跟进 `#379` 的“上游返回 0 字节时钉钉前端无错误反馈”场景，明确插件侧兜底提示与日志建议（`/verbose on`）边界
-- [ ] 跟进 `#407` 的“card 模式下无回复 + ackReaction 不显示”现场，区分卡片发送链路异常与 thinking 反馈配置问题
-- [ ] （拟完成，请评估）跟进 `#513` 的 session-recovery 卡片冻结问题：当前已补 markdown fallback 兜底，仍需在 Anthropic thinking recovery 实机路径确认第二轮恢复后的最终用户观感
+- [x] （拟完成，请评估）跟进 `#513` 的 session-recovery 卡片冻结问题：当前已补 markdown fallback 兜底，仍需在 Anthropic thinking recovery 实机路径确认第二轮恢复后的最终用户观感
   - [x] [#518 fix(card): deliver markdown fallback when session-recovery updates a finished card](https://github.com/soimy/openclaw-channel-dingtalk/pull/518)（状态：合并）
-- [ ] 跟进 `#457` 对 `/reasoning on` 与 `/reasoning stream` 的统一交付方案，确认多轮 assistant turn 与 finalize 边界在 card 模式稳定
-  - [ ] [#457 fix(card): unify reasoning-on and reasoning-stream block delivery](https://github.com/soimy/openclaw-channel-dingtalk/pull/457)（状态：审核中）
-- [ ] （拟完成，请评估）跟进 `#543` 的同会话并发建卡 guard：`#543` 已合并并补同步 in-flight guard、markdown 降级与并发回归，待一次真机快速连发验证
+- [x] 跟进 `#543` 的同会话并发建卡 guard：`#543` 已合并并补同步 in-flight guard、markdown 降级与并发回归，待一次真机快速连发验证
   - [x] [#543 fix(card): prevent duplicate card creation via synchronous in-flight guard](https://github.com/soimy/openclaw-channel-dingtalk/pull/543)（状态：合并）
-- [ ] （拟完成，请评估）跟进 `#544` 的主动推送 card final 空白问题：`#546/#548` 已修复 proactive block finalize 与 opened streaming lifecycle，待一次主动推送 + 打开态流式卡片真机回归
+- [x] 跟进 `#544` 的主动推送 card final 空白问题：`#546/#548` 已修复 proactive block finalize 与 opened streaming lifecycle，待一次主动推送 + 打开态流式卡片真机回归
   - [x] [#546 fix(card): finalize proactive cards with block variables](https://github.com/soimy/openclaw-channel-dingtalk/pull/546)（状态：合并）
   - [x] [#548 fix(card): finalize opened streaming lifecycle](https://github.com/soimy/openclaw-channel-dingtalk/pull/548)（状态：合并）
-- [ ] 跟进 `#538` 的 thinking-only assistant message 静默丢弃：先用 v3.6.1 复测；若仍可复现，评估 thinking 降级为 text 或显式“模型输出格式异常”提示，避免用户无感知
-- [ ] 跟进 `#551` 的 AI Card 二次流式/合并回归：复核长输出与 Markdown 图片 `file://` 场景下是否重复追加内容和重复发送图片，评估“下方最终块改为普通富文本或移除二次 AI 流式块”的模板策略，并确认自定义卡片模板变量说明是否足够支撑用户侧实验
 - [x] 同步 `#531` stop 按钮未中止 underlying embedded run 的关闭结论：当前由 `#495` 回滚 AI Card v2 hybrid streaming 关闭，后续若重启 v2 卡片方案需重新验证 stop button 与 `/stop` 中止语义一致性
 - [x] 同步 `#534` finalize 延迟反馈关闭结论：`#548` 已修复 opened streaming lifecycle finalization，仍将“慢 streaming PUT warn/timeout 可观测性”保留为后续卡片链路排障关注点
-- [ ] 复核 `#419` 关闭结论：确认“会话锁外提前建卡/空 Done 卡片”修复是否已入 `main`；若未落地，按最小补丁重提
-  - [ ] [#418 fix: use dispatch counts to prevent empty "Done" card finalize](https://github.com/soimy/openclaw-channel-dingtalk/pull/418)（状态：已关闭未合并）
+
+</details>
 
 ### 3. 文件上传 / 文件读取 / 文件预览 / 大文件链路
 相关 Issues：
