@@ -30,8 +30,8 @@
 - [ ] 合并核对 `#345` 新反馈（markdown 模式也出现间歇性丢回复），确认是否与连接层问题同源
 - [ ] 汇总 `#104` 最新反馈中“群聊需 @ 才稳定触发”的现象，区分上游丢消息与群聊触发条件导致的假阳性
 - [ ] 跟进 `#373` 的版本升级回归（3.2 -> 3.4.0）与日志采样，新增“连接到内网地址”证据，确认是否与 `#104/#345` 同源
-- [ ] 跟进 `#550` 的 IPv6 路由异常可选强制 IPv4 方案：确认 `OPENCLAW_DINGTALK_FORCE_IPV4=1` 对 sendBySession 超时现场有效，并补充 keepAlive 与 IPv4 选项耦合说明
-  - [ ] [#550 fix(http): allow opt-in IPv4-only HTTP agent for IPv6-broken environments](https://github.com/soimy/openclaw-channel-dingtalk/pull/550)（状态：审核中（CI 通过，Greptile 仅 P2 风格建议））
+- [ ] 跟进 `#550` 的 IPv6 路由异常排障方案：维护者倾向先用 `NODE_OPTIONS=--dns-result-order=ipv4first`、resolver/代理等宿主机层处理，暂不在插件层新增 `OPENCLAW_DINGTALK_FORCE_IPV4` API；优先沉淀 troubleshooting 文档，若更多环境反复出现再评估代码兜底
+  - [ ] [#550 fix(http): allow opt-in IPv4-only HTTP agent for IPv6-broken environments](https://github.com/soimy/openclaw-channel-dingtalk/pull/550)（状态：审核中（维护者倾向暂不合并代码；CI 通过，Greptile 仅 P2 风格建议））
 - [x] 跟进 `#390` 的 callback ack 时序修复方案，补齐 `no-dedupKey` 与 in-flight 分支 ACK 行为一致性回归
   - [x] [#392 fix: acknowledge DingTalk callback immediately to prevent redelivery](https://github.com/soimy/openclaw-channel-dingtalk/pull/392)（状态：合并）
 - [x] 跟进终态 FAILED 后 `waitForStop` 卡死导致无法自动恢复的问题，并确认修复已落地
@@ -44,6 +44,8 @@
 - [#538 [问题反馈] 当 assistant message 只有 thinking 无 text 时，channel 静默丢弃，用户无感知](https://github.com/soimy/openclaw-channel-dingtalk/issues/538)（状态：开启；维护者要求先用 v3.6.1 复测）
 - [#544 [问题反馈] 钉钉AI CARD发出来卡片为空](https://github.com/soimy/openclaw-channel-dingtalk/issues/544)（状态：已关闭（关联 PR #546/#548，2026-05-01））
 - [#551 [问题反馈] AI card 流式重复更新+合并bug，以及附带一个自己发现的图文并茂发送方式](https://github.com/soimy/openclaw-channel-dingtalk/issues/551)（状态：开启；涉及 AI Card 已流式内容二次慢速流式与图片重复）
+- [#531 [Bug] AI Card stop button does not abort the underlying embedded agent run](https://github.com/soimy/openclaw-channel-dingtalk/issues/531)（状态：已关闭（关联 PR #495，2026-05-04））
+- [#534 [Bug] AI Card 消息 finalize 延迟 5-10 秒，期间 gateway 日志无任何记录](https://github.com/soimy/openclaw-channel-dingtalk/issues/534)（状态：已关闭（关联 PR #548，2026-05-04））
 
 任务：
 - [ ] 回归 Done 提前结束问题
@@ -107,7 +109,9 @@
   - [x] [#546 fix(card): finalize proactive cards with block variables](https://github.com/soimy/openclaw-channel-dingtalk/pull/546)（状态：合并）
   - [x] [#548 fix(card): finalize opened streaming lifecycle](https://github.com/soimy/openclaw-channel-dingtalk/pull/548)（状态：合并）
 - [ ] 跟进 `#538` 的 thinking-only assistant message 静默丢弃：先用 v3.6.1 复测；若仍可复现，评估 thinking 降级为 text 或显式“模型输出格式异常”提示，避免用户无感知
-- [ ] 跟进 `#551` 的 AI Card 二次流式/合并回归：复核长输出与 Markdown 图片 `file://` 场景下是否重复追加内容和重复发送图片，明确终态富文本渲染与最终块合并策略
+- [ ] 跟进 `#551` 的 AI Card 二次流式/合并回归：复核长输出与 Markdown 图片 `file://` 场景下是否重复追加内容和重复发送图片，评估“下方最终块改为普通富文本或移除二次 AI 流式块”的模板策略，并确认自定义卡片模板变量说明是否足够支撑用户侧实验
+- [x] 同步 `#531` stop 按钮未中止 underlying embedded run 的关闭结论：当前由 `#495` 回滚 AI Card v2 hybrid streaming 关闭，后续若重启 v2 卡片方案需重新验证 stop button 与 `/stop` 中止语义一致性
+- [x] 同步 `#534` finalize 延迟反馈关闭结论：`#548` 已修复 opened streaming lifecycle finalization，仍将“慢 streaming PUT warn/timeout 可观测性”保留为后续卡片链路排障关注点
 - [ ] 复核 `#419` 关闭结论：确认“会话锁外提前建卡/空 Done 卡片”修复是否已入 `main`；若未落地，按最小补丁重提
   - [ ] [#418 fix: use dispatch counts to prevent empty "Done" card finalize](https://github.com/soimy/openclaw-channel-dingtalk/pull/418)（状态：已关闭未合并）
 
@@ -328,6 +332,7 @@
   - [ ] [#489 feat(approval): exec/plugin approval card with command session dispatch](https://github.com/soimy/openclaw-channel-dingtalk/pull/489)（状态：新（草稿，CI 通过））
 - [x] 评估 `#427` 的“停止指令绕过 session 锁”方案与现有卡片停止流程整合边界（避免空卡片 finalize）
   - [x] [#427 feat: bypass session lock for real-time stop command support](https://github.com/soimy/openclaw-channel-dingtalk/pull/427)（状态：合并）
+- [x] 同步 `#531` AI Card stop button 中止语义反馈：issue 已随 `#495` 回滚 v2 hybrid streaming 关闭，后续若恢复卡片按钮驱动中止能力，需验证底层 embedded run abort 与卡片 finalize 状态一致
 
 ### 11. AI Card usage footer / thinking 展示行为可配置
 相关 Issues：
