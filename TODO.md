@@ -297,7 +297,6 @@
 
 ### 9. 支持群聊 @人 / @all
 相关 Issues：
-- [#522 [功能建议] AI Card支持@User响应](https://github.com/soimy/openclaw-channel-dingtalk/issues/522)（状态：已关闭（2026-04-28 自动关闭，可重开））
 
 任务：
 - [ ] （拟完成，请评估）明确 @单人 需求范围
@@ -400,6 +399,7 @@
 ### 13. README / 截图 / onboarding / 配置说明补齐
 相关 Issues：
 - [#532 请求支持扫码登录/扫码绑定功能](https://github.com/soimy/openclaw-channel-dingtalk/issues/532)（状态：已关闭（关联 PR #537，2026-05-01））
+- [#552 [问题反馈] 最新版5.4openclaw无法安装钉钉插件](https://github.com/soimy/openclaw-channel-dingtalk/issues/552)（状态：开启；OpenClaw 2026.5.4 安装要求发布包包含编译 runtime output）
 
 任务：
 - [ ] （拟完成，请评估）补 README 截图
@@ -421,8 +421,8 @@
   - [ ] [#337 refactor: deprecate legacy dingtalk debug config](https://github.com/soimy/openclaw-channel-dingtalk/pull/337)（状态：要求修改，已关闭未合并）
 - [ ] 增补“钉钉上游能力边界”FAQ：项目管理接口、文档表格编辑、消息输出类型限制（#293/#340/#342）
 - [ ] 增补“主动消息发送”FAQ 与前置条件（`robotCode`、会话预热、机器人类型权限、流式模式差异）（#144/#355）
-- [ ] 跟进 `#527` 的 `dingtalk-connector.*` Gateway RPC 兼容：已补兼容边界说明、严格 `messageId`、target 校验、`clientId` 脱敏与 warn 日志，CI 通过；reviewDecision 仍为要求修改，待 maintainer 复核翻转
-  - [ ] [#527 feat: add DingTalk connector Gateway RPC compatibility](https://github.com/soimy/openclaw-channel-dingtalk/pull/527)（状态：要求修改（review follow-up 已补，CI 通过））
+- [ ] （拟完成，请评估）跟进 `#527` 的 `dingtalk-connector.*` Gateway RPC 兼容：已合并，后续仅需观察兼容 namespace 使用反馈与文档理解成本
+  - [x] [#527 feat: add DingTalk connector Gateway RPC compatibility](https://github.com/soimy/openclaw-channel-dingtalk/pull/527)（状态：合并）
 - [ ] 增补“定时/主动发送到指定群”说明（`conversationId` 直发 + `displayNameResolution` 能力与版本门槛）（#376/#372）
 - [ ] 合并 `#455` 追问：补充 `cron/jobs.json` 中 `conversationId: group:cid...` 与 `session_key` 两种定向发送写法示例
 - [ ] （拟完成，请评估）跟进 `#519` 的 CLI 子命令加载噪音：循环依赖已拆除，待补一次发布后 CLI 子命令真实安装路径回归确认噪音已消失
@@ -438,6 +438,8 @@
 - [ ] 跟进 `#423/#426/#434/#435` 安装失败反馈：补“安装方式 + OpenClaw 最低版本 + semver 兼容”检查清单
 - [ ] 合并 `#498/#502` 的兼容性结论：确认 `v3.5.3` 已修复 `telegram-core` 导入缺失，但 `qa-lab / install.runtime` 安装噪音仍属上游 OpenClaw 打包问题，并补最低兼容版本与升级/回退指引
 - [ ] 补充 `#434/#435` 最新进展：标注 clawhub 安装路径缺陷与 semver 紧急修复（`b21e501`）的适用边界，给出临时 git 安装指引
+- [ ] 跟进 `#552` 的 OpenClaw 2026.5.4 安装失败：`#553` 已补 `dist/index.js`/`dist/index.d.ts` runtime output、`build/prepack/pack:check`、发布 workflow 校验，并移除 runtime `child_process`/SecretInput `exec` 阻断；待合并发布后回归 `openclaw plugins install @soimy/dingtalk`
+  - [ ] [#553 fix(package): publish compiled OpenClaw runtime](https://github.com/soimy/openclaw-channel-dingtalk/pull/553)（状态：审核中（CI 通过，Greptile 仅 P2 正则/冗余配置建议））
 - [x] 同步 `#445` 配置字段收敛（移除 `corpId/agentId/robotCode`）与 README/onboarding 更新，减少安装与升级期配置歧义
   - [x] [#445 refactor: remove dead config fields corpId, agentId, robotCode](https://github.com/soimy/openclaw-channel-dingtalk/pull/445)（状态：合并）
 - [x] 补充 `cardAtSender` 配置参考说明，确保字段类型、默认值与群聊 @sender 行为说明同步到 reference 文档
