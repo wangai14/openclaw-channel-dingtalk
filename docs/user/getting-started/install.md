@@ -1,5 +1,7 @@
 # 安装
 
+> 本仓库使用 pnpm 作为包管理器。如未安装，可执行 `npm install -g pnpm` 或 `corepack enable`。
+
 本文覆盖插件的主要安装方式，以及安装后最容易遗漏的信任白名单配置。
 
 ## 推荐方式
@@ -25,9 +27,12 @@ openclaw plugins install @soimy/dingtalk
 ```bash
 git clone https://github.com/soimy/openclaw-channel-dingtalk.git
 cd openclaw-channel-dingtalk
-npm install
+pnpm install
+pnpm run build
 openclaw plugins install -l .
 ```
+
+> **注意**：v3.6.2 起，本地安装前必须执行 `pnpm run build` 编译 runtime 产物。OpenClaw 2026.5.x 需要编译后的 `dist/index.js` 才能加载插件。
 
 推荐的本地布局：
 
@@ -66,8 +71,8 @@ NPM_CONFIG_REGISTRY=https://registry.npmmirror.com openclaw plugins install @soi
 
 ```bash
 cd ~/.openclaw/extensions/dingtalk
-rm -rf node_modules package-lock.json
-NPM_CONFIG_REGISTRY=https://registry.npmmirror.com npm install
+rm -rf node_modules pnpm-lock.yaml
+NPM_CONFIG_REGISTRY=https://registry.npmmirror.com pnpm install
 ```
 
 如果希望长期使用镜像：

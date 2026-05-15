@@ -44,6 +44,8 @@
 2. 如果需要更强的流式互动体验，再选 `card`
 3. 如果担心钉钉 API 调用量或卡片失败降级，先从 `markdown` 开始验证
 
+> **群聊兼容性**：OpenClaw 2026.5.7 之后群聊默认 `visibleReplies=message_tool`，插件已在 card 和 markdown strategy 中显式覆盖为 `automatic`（v3.6.2+），确保群聊回复不会丢失。无需额外配置。
+
 ## 会话级显示开关
 
 `/reasoning` 与 `/verbose` 是上游 OpenClaw 的会话级显示开关。插件负责把已经到达钉钉通路的事件送出去，但不负责强制模型一定产出 reasoning 或 tool 事件。

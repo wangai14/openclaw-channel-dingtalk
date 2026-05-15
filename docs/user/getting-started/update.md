@@ -20,8 +20,8 @@ NPM_CONFIG_REGISTRY=https://registry.npmmirror.com openclaw plugins update dingt
 
 ```bash
 cd ~/.openclaw/extensions/dingtalk
-rm -rf node_modules package-lock.json
-NPM_CONFIG_REGISTRY=https://registry.npmmirror.com npm install
+rm -rf node_modules pnpm-lock.yaml
+NPM_CONFIG_REGISTRY=https://registry.npmmirror.com pnpm install
 ```
 
 ## 本地源码 / 链接安装来源
@@ -30,8 +30,12 @@ NPM_CONFIG_REGISTRY=https://registry.npmmirror.com npm install
 
 ```bash
 git pull
+pnpm install
+pnpm run build
 openclaw gateway restart
 ```
+
+> **注意**：v3.6.2 起，更新后必须执行 `pnpm run build` 重新编译 runtime 产物，然后重启 gateway。OpenClaw 2026.5.x 需要编译后的 `dist/index.js` 才能加载插件。
 
 使用推荐的独立仓库布局时，更新插件不需要改动本地 `openclaw` 主仓库。
 
