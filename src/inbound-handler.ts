@@ -60,8 +60,9 @@ import { getSessionState, initSessionState } from "./session-state";
 import { getAgentDisplayName } from "./targeting/agent-name-matcher";
 import {
   buildAgentSessionKey,
-  resolveSubAgentRoute,
   dispatchSubAgents,
+  resolveMessageTarget,
+  sendUnmatchedAgentNotice,
 } from "./targeting/agent-routing";
 import { formatGroupMembers, noteGroupMember } from "./targeting/group-members-store";
 import {
@@ -580,8 +581,10 @@ export async function handleDingTalkMessage(params: HandleDingTalkMessageParams)
   // for use in card quoteContent which should show the user's original message.
   const rawInboundText = extractedContent.text.trim();
 
-  // Add context hint for sub-agent mode, stripping quoted prefix to avoid protocol noise in agent context.
-  if (subAgentOptions) {
+  // Add context hint for sub-agent content mode, stripping quoted prefix to avoid protocol noise
+  // in agent context. Skipped for targeted slash commands (`commandText` set): the hint would
+  // pollute RawBody, and the command never reaches the agent's LLM anyway.
+  if (subAgentOptions && !subAgentOptions.commandText) {
     const cleanText = extractedContent.text.replace(/^\[引用[^\]]*\]\s*/, "");
     const contextHint = `[你被 @ 为"${subAgentOptions.matchedName}"]\n\n`;
     extractedContent.text = contextHint + cleanText;
@@ -772,40 +775,50 @@ export async function handleDingTalkMessage(params: HandleDingTalkMessageParams)
     config: dingtalkConfig,
   });
 
-  const route = subAgentOptions
-    ? {
-        agentId: subAgentOptions.agentId,
-        sessionKey: buildAgentSessionKey({
-          rt,
-          cfg,
-          accountId,
-          agentId: subAgentOptions.agentId,
-          peerKind: sessionPeer.kind,
-          peerId: sessionPeer.peerId,
-        }),
-        mainSessionKey: "",
-      }
-    : rt.channel.routing.resolveAgentRoute({
-        cfg,
-        channel: "dingtalk",
-        accountId,
-        peer: { kind: sessionPeer.kind, id: sessionPeer.peerId },
-      });
+  // Single routing decision for this message. Skipped for recursive sub-agent
+  // calls, where routing is already fixed by subAgentOptions.
+  const messageTarget = subAgentOptions
+    ? null
+    : resolveMessageTarget({ extractedContent, cfg, isGroup });
 
-  // @Sub-Agent routing: resolve @mentions to agents (skip in recursive sub-agent calls)
-  if (!subAgentOptions) {
-    const subAgentRoute = await resolveSubAgentRoute({
-      extractedContent,
+  let route: { agentId: string; sessionKey: string; mainSessionKey: string };
+  if (subAgentOptions) {
+    // Recursive sub-agent dispatch (content or targeted command): route to the
+    // agent's own session. A missing host helper throws here and is caught by
+    // dispatchSubAgents in the parent call.
+    route = {
+      agentId: subAgentOptions.agentId,
+      sessionKey: buildAgentSessionKey({
+        rt,
+        cfg,
+        accountId,
+        agentId: subAgentOptions.agentId,
+        peerKind: sessionPeer.kind,
+        peerId: sessionPeer.peerId,
+      }),
+      mainSessionKey: "",
+    };
+  } else {
+    // Default route. For subagent-content / subagent-command targets the
+    // dispatch below re-enters this function with subAgentOptions set, so this
+    // route is only consumed when the target is "default".
+    route = rt.channel.routing.resolveAgentRoute({
       cfg,
-      isGroup,
-      dingtalkConfig,
-      sessionWebhook,
-      senderId,
-      log,
+      channel: "dingtalk",
+      accountId,
+      peer: { kind: sessionPeer.kind, id: sessionPeer.peerId },
     });
-    if (subAgentRoute) {
+  }
+
+  // @Sub-Agent routing: dispatch @mention-targeted messages to their agent(s).
+  // Both content (`@agent <message>`) and commands (`@agent /new`) re-enter
+  // handleDingTalkMessage via dispatchSubAgents with subAgentOptions set, so the
+  // agent session key, helper-missing fallback, and recursion live in one path.
+  if (messageTarget && messageTarget.kind !== "default") {
+    if (messageTarget.kind === "subagent-command") {
       await dispatchSubAgents({
-        ...subAgentRoute,
+        matchedAgents: [messageTarget.agent],
+        commandText: messageTarget.commandText,
         cfg,
         accountId,
         data,
@@ -818,6 +831,38 @@ export async function handleDingTalkMessage(params: HandleDingTalkMessageParams)
       });
       return;
     }
+
+    if (messageTarget.hasInvalidAgentNames) {
+      await sendUnmatchedAgentNotice({
+        unmatchedNames: messageTarget.unmatchedNames,
+        isGroup,
+        senderId,
+        dingtalkConfig,
+        sessionWebhook,
+        log,
+      });
+    }
+    if (messageTarget.matchedAgents.length > 0) {
+      log?.info?.(
+        `[DingTalk] Sub-agent resolve: matched=${messageTarget.matchedAgents
+          .map((a) => a.agentId)
+          .join(",")} unmatched=${messageTarget.unmatchedNames.join(",")}`,
+      );
+      await dispatchSubAgents({
+        matchedAgents: messageTarget.matchedAgents,
+        cfg,
+        accountId,
+        data,
+        dingtalkConfig,
+        sessionWebhook,
+        extractedContent,
+        handleMessage: handleDingTalkMessage,
+        downloadMedia,
+        log,
+      });
+      return;
+    }
+    // Only invalid agent names and no match: fall through to the default route.
   }
 
   // Route resolved before media download for session context and routing metadata.
@@ -832,7 +877,7 @@ export async function handleDingTalkMessage(params: HandleDingTalkMessageParams)
     dingtalkConfig,
     senderId,
     isDirect,
-    extractedText: extractedContent.text,
+    extractedText: subAgentOptions?.commandText ?? extractedContent.text,
     messageType: extractedContent.messageType,
     data: {
       conversationId: data.conversationId,
@@ -1497,6 +1542,10 @@ export async function handleDingTalkMessage(params: HandleDingTalkMessageParams)
     const inboundText = attachmentExtractedText
       ? `${inboundBody.trimEnd()}\n\n${attachmentExtractedText}`
       : inboundBody;
+    // Targeted slash commands (`@agent /new`) pass the @mention-stripped command
+    // text as CommandBody so the framework command layer recognizes it, while
+    // RawBody keeps the user's original input for audit/quote display.
+    const commandBody = subAgentOptions?.commandText ?? inboundText;
     const learningEnabled = isLearningEnabled(dingtalkConfig);
     const learningContextBlock = buildLearningContextBlock({
       enabled: learningEnabled,
@@ -1546,7 +1595,7 @@ export async function handleDingTalkMessage(params: HandleDingTalkMessageParams)
     const ctx = rt.channel.reply.finalizeInboundContext({
       Body: body,
       RawBody: inboundText,
-      CommandBody: inboundText,
+      CommandBody: commandBody,
       QuotedRef: quotedRef,
       QuotedRefJson: quotedRef ? JSON.stringify(quotedRef) : undefined,
       ReplyToId: quotedRuntimeContext?.replyToId,
