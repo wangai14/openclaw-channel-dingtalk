@@ -133,6 +133,8 @@ export function createCardReplyStrategy(
   let latestReasoningSnapshot = "";
   /** Non-image media attachments deferred for out-of-card delivery. */
   let pendingNonImageMedia: DeferredMedia[] = [];
+  /** URLs already processed in this card session — prevents duplicate upload/send when the same mediaUrl appears in both a non-final and final deliver. */
+  const processedMediaUrls = new Set<string>();
 
   const getRenderedTimeline = (options: { preferFinalAnswer?: boolean } = {}): string => {
     const fallbackAnswer = finalTextForFallback || (sawFinalDelivery ? EMPTY_FINAL_REPLY : undefined);
@@ -345,6 +347,12 @@ export function createCardReplyStrategy(
         continue;
       }
 
+      if (processedMediaUrls.has(candidate.url.trim())) {
+        const placeholder = buildImagePlaceholderText({ alt: candidate.alt, url: candidate.url });
+        nextText = `${nextText.slice(0, candidate.start)}${placeholder}${nextText.slice(candidate.end)}`;
+        continue;
+      }
+
       let prepared: Awaited<ReturnType<typeof prepareMediaInput>> | undefined;
       try {
         prepared = await prepareMediaInput(candidate.url, log, config.mediaUrlAllowlist);
@@ -361,6 +369,7 @@ export function createCardReplyStrategy(
           continue;
         }
 
+        processedMediaUrls.add(candidate.url.trim());
         const placeholder = buildImagePlaceholderText({ alt: candidate.alt, url: candidate.url });
         const blockText = candidate.alt.trim() || placeholder.replace(/^见下图/, "").trim() || "图片";
         successfulReroutes.push({
@@ -477,6 +486,10 @@ export function createCardReplyStrategy(
         // Inline media upload → image blocks in card; defer non-image attachments
         if (payload.mediaUrls.length > 0) {
           for (const url of payload.mediaUrls) {
+            const normalizedUrl = url.trim();
+            if (processedMediaUrls.has(normalizedUrl)) {
+              continue;
+            }
             try {
               const prepared = await prepareMediaInput(url, log, config.mediaUrlAllowlist);
               const mediaType = resolveOutboundMediaType({ mediaPath: prepared.path, asVoice: false });
@@ -492,6 +505,7 @@ export function createCardReplyStrategy(
               const result = await uploadMedia(config, prepared.path, "image", log);
               await prepared.cleanup?.();
               if (result?.mediaId) {
+                processedMediaUrls.add(normalizedUrl);
                 await controller.appendImageBlock(result.mediaId);
               }
             } catch (err: unknown) {
@@ -555,6 +569,10 @@ export function createCardReplyStrategy(
       // ---- block: only handle reasoning/media (other text blocks are unused) ----
       if (payload.mediaUrls.length > 0) {
         for (const url of payload.mediaUrls) {
+          const normalizedUrl = url.trim();
+          if (processedMediaUrls.has(normalizedUrl)) {
+            continue;
+          }
           try {
             const prepared = await prepareMediaInput(url, log, config.mediaUrlAllowlist);
             const mediaType = resolveOutboundMediaType({ mediaPath: prepared.path, asVoice: false });
@@ -567,6 +585,7 @@ export function createCardReplyStrategy(
             const result = await uploadMedia(config, prepared.path, "image", log);
             await prepared.cleanup?.();
             if (result?.mediaId) {
+              processedMediaUrls.add(normalizedUrl);
               await controller.appendImageBlock(result.mediaId);
             }
           } catch (err: unknown) {
