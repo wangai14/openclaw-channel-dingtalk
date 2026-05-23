@@ -11,7 +11,7 @@
 
 任务：
 - [ ] 跟进 `#550` 的 IPv6 路由异常排障方案：维护者倾向先用 `NODE_OPTIONS=--dns-result-order=ipv4first`、resolver/代理等宿主机层处理，暂不在插件层新增 `OPENCLAW_DINGTALK_FORCE_IPV4` API；优先沉淀 troubleshooting 文档，若更多环境反复出现再评估代码兜底
-  - [ ] [#550 fix(http): allow opt-in IPv4-only HTTP agent for IPv6-broken environments](https://github.com/soimy/openclaw-channel-dingtalk/pull/550)（状态：审核中（维护者倾向暂不合并代码；CI 通过，Greptile 仅 P2 风格建议））
+  - [ ] [#550 fix(http): allow opt-in IPv4-only HTTP agent for IPv6-broken environments](https://github.com/soimy/openclaw-channel-dingtalk/pull/550)（状态：已关闭未合并（维护者倾向宿主机层处理；CI 通过，Greptile 仅 P2 风格建议））
 
 <details>
 <summary>已完成：</summary>
@@ -38,12 +38,7 @@
 
 ### 2. AI Card 发送链路一致性
 相关 Issues：
-- [#541 钉钉发送markdown格式消息混乱](https://github.com/soimy/openclaw-channel-dingtalk/issues/541)（状态：开启；最新评论指向钉钉 markdown 表格分隔行兼容性）
-- [#538 [问题反馈] 当 assistant message 只有 thinking 无 text 时，channel 静默丢弃，用户无感知](https://github.com/soimy/openclaw-channel-dingtalk/issues/538)（状态：开启；维护者要求先用 v3.6.1 复测）
-- [#544 [问题反馈] 钉钉AI CARD发出来卡片为空](https://github.com/soimy/openclaw-channel-dingtalk/issues/544)（状态：已关闭（关联 PR #546/#548，2026-05-01））
-- [#551 [问题反馈] AI card 流式重复更新+合并bug，以及附带一个自己发现的图文并茂发送方式](https://github.com/soimy/openclaw-channel-dingtalk/issues/551)（状态：开启；用户补充定位到模板中的图片引用容器组件与下方 AI 流式富文本块可能共同导致重复）
-- [#531 [Bug] AI Card stop button does not abort the underlying embedded agent run](https://github.com/soimy/openclaw-channel-dingtalk/issues/531)（状态：已关闭（关联 PR #495，2026-05-04））
-- [#534 [Bug] AI Card 消息 finalize 延迟 5-10 秒，期间 gateway 日志无任何记录](https://github.com/soimy/openclaw-channel-dingtalk/issues/534)（状态：已关闭（关联 PR #548，2026-05-04））
+- [#538 [问题反馈] 当 assistant message 只有 thinking 无 text 时，channel 静默丢弃，用户无感知](https://github.com/soimy/openclaw-channel-dingtalk/issues/538)（状态：开启；维护者要求先用 v3.6.1 复测）（Stale）
 
 任务：
 - [ ] 复盘 `#363` 关闭未合并方案与当前主线差异，确认其风险点已被后续修复覆盖
@@ -61,7 +56,7 @@
 <summary>已完成：</summary>
 
 - [x] 跟进 `#457` 对 `/reasoning on` 与 `/reasoning stream` 的统一交付方案，确认多轮 assistant turn 与 finalize 边界在 card 模式稳定
-  - [x] [#457 fix(card): unify reasoning-on and reasoning-stream block delivery](https://github.com/soimy/openclaw-channel-dingtalk/pull/457)（状态：审核中）
+  - [x] [#457 fix(card): unify reasoning-on and reasoning-stream block delivery](https://github.com/soimy/openclaw-channel-dingtalk/pull/457)（状态：合并）
 - [x] 回归媒体消息 `仅媒体/仅文本/媒体+文本` 的 deliver 组合行为（#321/#311）
   - [x] [#311 fix: deliver MEDIA attachments in inbound reply handler](https://github.com/soimy/openclaw-channel-dingtalk/pull/311)（状态：合并）
 - [x] 评估并实现 `card.stream` 节流/合并策略，降低限流风险（#318）
@@ -88,8 +83,8 @@
 - [x] 跟进 `#444` 重提的内置卡片模板 + 停止按钮方案，当前已合并入 `main`，后续重点转向与 v2 草稿方案的重叠收敛
   - [x] [#444 feat(card): built-in AI card template with stop button support](https://github.com/soimy/openclaw-channel-dingtalk/pull/444)（状态：合并）
 - [x] 跟进 `#448/#480` 的 AI Card v2 结构化 `CardBlock[]` 草稿方案，评估其与 `#444` 的重叠/替代关系后再决定推进路径
-  - [x] [#448 refactor: AI Card v2 — structured CardBlock[] with preset template](https://github.com/soimy/openclaw-channel-dingtalk/pull/448)（状态：新（草稿））
-  - [x] [#480 feat(card): implement card template v2 with rich block content and action btns](https://github.com/soimy/openclaw-channel-dingtalk/pull/480)（状态：审核中（review follow-up 已补，待复核；CI 通过））
+  - [x] [#448 refactor: AI Card v2 — structured CardBlock[] with preset template](https://github.com/soimy/openclaw-channel-dingtalk/pull/448)（状态：已关闭未合并）
+  - [x] [#480 feat(card): implement card template v2 with rich block content and action btns](https://github.com/soimy/openclaw-channel-dingtalk/pull/480)（状态：合并）
 - [x] 跟进 `#427` 文本停止指令 pre-lock bypass 方案，补“空确认文本兜底 + 多次 deliver 文本选取”回归后再评估合入
   - [x] [#427 feat: bypass session lock for real-time stop command support](https://github.com/soimy/openclaw-channel-dingtalk/pull/427)（状态：合并）
 - [x] 跟进 AI Card finalize 收尾修复并回归“多轮 tool + final chunk + 首行重复”组合场景（#348/#350/#352）
@@ -139,13 +134,12 @@
 - [ ] 跟进 `#430` 群聊文件读取反馈：确认 `#411` 发布版本已覆盖“引用文件 + @Bot”路径，并补权限/时效性说明与版本提示
 - [x] 跟进 `#442` 入站附件下载超时阻塞问题，补“第二跳下载 timeout + host 日志”回归
   - [x] [#443 fix: add timeout and host logging for inbound media download](https://github.com/soimy/openclaw-channel-dingtalk/pull/443)（状态：合并）
-- [ ] 跟进 `#452/#454` 的 messaging 分域迁移 PR，确认 `quoted-file-service` 与 `attachment-text-extractor` 搬迁后文件链路回归覆盖完整
-  - [ ] [#452 refactor(messaging): move quoted file helpers into messaging](https://github.com/soimy/openclaw-channel-dingtalk/pull/452)（状态：通过）
-  - [ ] [#454 refactor(messaging): move attachment text extraction into messaging](https://github.com/soimy/openclaw-channel-dingtalk/pull/454)（状态：通过）
+- [ ] （拟完成，请评估）跟进 `#452/#454` 的 messaging 分域迁移 PR，确认 `quoted-file-service` 与 `attachment-text-extractor` 搬迁后文件链路回归覆盖完整
+  - [x] [#452 refactor(messaging): move quoted file helpers into messaging](https://github.com/soimy/openclaw-channel-dingtalk/pull/452)（状态：合并）
+  - [x] [#454 refactor(messaging): move attachment text extraction into messaging](https://github.com/soimy/openclaw-channel-dingtalk/pull/454)（状态：合并）
 
 ### 4. 图片 / 语音 / 媒体链路补强
 相关 Issues：
-- [#542 单条消息多张图片只收到第一张，mediaPaths 未处理](https://github.com/soimy/openclaw-channel-dingtalk/issues/542)（状态：已关闭（关联 PR #545，2026-05-01））
 
 任务：
 - [ ] 回归本地图片发送
@@ -281,8 +275,8 @@
   - [x] [#385 feat: group access control with per-group allowlist, sender restriction, and disabled policy](https://github.com/soimy/openclaw-channel-dingtalk/pull/385)（状态：合并）
 - [ ] 跟进 `#380` HTTP callback 多实例方案的 review 阻塞项（签名校验、TOPIC_CARD 回调行为、部署文档边界）
   - [ ] [#380 feat(dingtalk): add HTTP callback mode for multi-instance deployment](https://github.com/soimy/openclaw-channel-dingtalk/pull/380)（状态：要求修改）
-- [ ] 跟进 `#383` 入站命令分发抽离重构，确认 command 域边界与现有 owner/session 命令回归覆盖
-  - [ ] [#383 refactor(dingtalk): 抽离入站命令分发逻辑](https://github.com/soimy/openclaw-channel-dingtalk/pull/383)（状态：通过）
+- [ ] （拟完成，请评估）跟进 `#383` 入站命令分发抽离重构，确认 command 域边界与现有 owner/session 命令回归覆盖
+  - [x] [#383 refactor(dingtalk): 抽离入站命令分发逻辑](https://github.com/soimy/openclaw-channel-dingtalk/pull/383)（状态：合并）
 - [x] 跟进 `#395` plugin-sdk API 对齐分支并完成兼容层回归（入口/类型导出/onboarding）
   - [x] [#395 refactor(dingtalk): Sync upstream plugin-sdk new API](https://github.com/soimy/openclaw-channel-dingtalk/pull/395)（状态：合并）
 - [ ] 跟进 `#472` 的 scoped import 对齐收尾，确认 `command-auth` 测试 mock 与 peer dependency 约束后再合入
@@ -357,8 +351,8 @@
 - [ ] 复盘 `#314` 合并后的会话隔离/kaomoji 兼容/状态机测试覆盖结论，沉淀回归清单
 - [ ] 复盘 `#367` 关闭未合并方案与当前主线差异（模板变量契约、callback 入口边界、synthetic message 生命周期）
   - [ ] [#367 feat: forward card action callbacks to AI with card variable update](https://github.com/soimy/openclaw-channel-dingtalk/pull/367)（状态：已关闭未合并）
-- [ ] 跟进 `#383` 入站命令分发重构的阻塞项（CI 失败 + ack reaction 重复/额外时延），确认不引入普通消息路径回归
-  - [ ] [#383 refactor(dingtalk): 抽离入站命令分发逻辑](https://github.com/soimy/openclaw-channel-dingtalk/pull/383)（状态：通过）
+- [ ] （拟完成，请评估）跟进 `#383` 入站命令分发重构的阻塞项（CI 失败 + ack reaction 重复/额外时延），确认不引入普通消息路径回归
+  - [x] [#383 refactor(dingtalk): 抽离入站命令分发逻辑](https://github.com/soimy/openclaw-channel-dingtalk/pull/383)（状态：合并）
 - [x] 跟进 AI Card dynamic summary 默认行为，确认配置与展示不引入额外噪声
   - [x] [#384 feat: enable dynamic summary for AI cards](https://github.com/soimy/openclaw-channel-dingtalk/pull/384)（状态：合并）
 - [x] 复核 `#374` 的“无思考中反馈”现场是否已被 `#362` 完全覆盖（含用户配置位置错误场景）
@@ -369,9 +363,9 @@
   - [x] [#447 feat(markdown): stream incremental timeline segments](https://github.com/soimy/openclaw-channel-dingtalk/pull/447)（状态：合并）
 - [x] 同步 `#446` 已由 `#447` 替代并关闭，避免重复跟踪
   - [x] [#446 feat(markdown): stream incremental timeline segments](https://github.com/soimy/openclaw-channel-dingtalk/pull/446)（状态：已关闭未合并）
-- [ ] 跟进 `#456` 在单聊场景反馈的 `/verbose` 与 `/reasoning` 失效问题，复核 `#447/#457` 是否已完整覆盖（含卡片与 markdown 两种模式）
+- [ ] （拟完成，请评估）跟进 `#456` 在单聊场景反馈的 `/verbose` 与 `/reasoning` 失效问题，复核 `#447/#457` 是否已完整覆盖（含卡片与 markdown 两种模式）
   - [x] [#447 feat(markdown): stream incremental timeline segments](https://github.com/soimy/openclaw-channel-dingtalk/pull/447)（状态：合并）
-  - [ ] [#457 fix(card): unify reasoning-on and reasoning-stream block delivery](https://github.com/soimy/openclaw-channel-dingtalk/pull/457)（状态：审核中）
+  - [x] [#457 fix(card): unify reasoning-on and reasoning-stream block delivery](https://github.com/soimy/openclaw-channel-dingtalk/pull/457)（状态：合并）
 
 ---
 
@@ -396,8 +390,6 @@
 
 ### 13. README / 截图 / onboarding / 配置说明补齐
 相关 Issues：
-- [#532 请求支持扫码登录/扫码绑定功能](https://github.com/soimy/openclaw-channel-dingtalk/issues/532)（状态：已关闭（关联 PR #537，2026-05-01））
-- [#552 [问题反馈] 最新版5.4openclaw无法安装钉钉插件](https://github.com/soimy/openclaw-channel-dingtalk/issues/552)（状态：开启；OpenClaw 2026.5.3+ 安装要求发布包包含编译 runtime output，评论中仍有 2026.5.5 / 源码安装方式差异待澄清）
 
 任务：
 - [ ] （拟完成，请评估）补 README 截图
@@ -436,8 +428,8 @@
 - [ ] 跟进 `#423/#426/#434/#435` 安装失败反馈：补“安装方式 + OpenClaw 最低版本 + semver 兼容”检查清单
 - [ ] 合并 `#498/#502` 的兼容性结论：确认 `v3.5.3` 已修复 `telegram-core` 导入缺失，但 `qa-lab / install.runtime` 安装噪音仍属上游 OpenClaw 打包问题，并补最低兼容版本与升级/回退指引
 - [ ] 补充 `#434/#435` 最新进展：标注 clawhub 安装路径缺陷与 semver 紧急修复（`b21e501`）的适用边界，给出临时 git 安装指引
-- [ ] 跟进 `#552` 的 OpenClaw 2026.5.3+ 安装失败：`#553` 已补 `dist/index.js`/`dist/index.d.ts` runtime output、`build/prepack/pack:check`、发布 workflow 校验，并移除 runtime `child_process`/SecretInput `exec` 阻断；新增评论显示用户对 `openclaw plugins install .` 源码安装与 OpenClaw 2026.5.5 表现仍有分歧，待合并发布后同时回归 npm 包安装、本地 tarball 安装与源码目录安装路径
-  - [ ] [#553 fix(package): publish compiled OpenClaw runtime](https://github.com/soimy/openclaw-channel-dingtalk/pull/553)（状态：审核中（CI 通过，Greptile 仅 P2 正则/冗余配置建议））
+- [ ] （拟完成，请评估）跟进 `#552` 的 OpenClaw 2026.5.3+ 安装失败：`#553` 已合并并关闭 issue，后续同时回归 npm 包安装、本地 tarball 安装与源码目录安装路径，补充 `scripts/` 仅开发使用且不随 npm/clawhub 包发布的说明
+  - [x] [#553 fix(package): publish compiled OpenClaw runtime](https://github.com/soimy/openclaw-channel-dingtalk/pull/553)（状态：合并）
 - [x] 同步 `#445` 配置字段收敛（移除 `corpId/agentId/robotCode`）与 README/onboarding 更新，减少安装与升级期配置歧义
   - [x] [#445 refactor: remove dead config fields corpId, agentId, robotCode](https://github.com/soimy/openclaw-channel-dingtalk/pull/445)（状态：合并）
 - [x] 补充 `cardAtSender` 配置参考说明，确保字段类型、默认值与群聊 @sender 行为说明同步到 reference 文档
