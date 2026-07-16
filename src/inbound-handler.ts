@@ -19,6 +19,7 @@ import {
 } from "./card/ask-user-question-context";
 import { isCardRunStopRequested, registerCardRun, removeCardRun } from "./card/card-run-registry";
 import { renderStatusLine } from "./card/statusline-renderer";
+import { resolveConfiguredTaskModelMetadata } from "./card/task-model-metadata";
 import { dispatchDingTalkCardStopCommand } from "./command/card-stop-command";
 import { handleInboundCommandDispatch } from "./command/inbound-command-dispatch-service";
 import {
@@ -937,17 +938,27 @@ async function handleDingTalkMessageInner(params: HandleDingTalkMessageParams): 
   const content = extractedContent;
   const isBtwBypass = isBtwRequestText(stripLeadingMentions(content.text).trim());
   const taskInfoConversationId = groupId || to;
-  const sessionTaskState = initSessionState(accountId, taskInfoConversationId);
+  const agentDisplayName = getAgentDisplayName({
+    subAgentOptions,
+    agentId: route.agentId,
+    agentsList: cfg.agents?.list,
+  });
+  const configuredTaskMetadata = resolveConfiguredTaskModelMetadata({
+    cfg,
+    agentId: route.agentId,
+  });
+  const sessionTaskStateScope = {
+    accountId,
+    conversationId: taskInfoConversationId,
+    agentId: route.agentId,
+  };
+  const sessionTaskState = initSessionState(sessionTaskStateScope, configuredTaskMetadata);
   const initialStatusLine =
     renderStatusLine(
       {
         model: sessionTaskState.model,
         effort: sessionTaskState.effort,
-        agent: getAgentDisplayName({
-          subAgentOptions,
-          agentId: route.agentId,
-          agentsList: cfg.agents?.list,
-        }),
+        agent: agentDisplayName,
       },
       dingtalkConfig,
     ) || undefined;
@@ -2176,7 +2187,7 @@ async function handleDingTalkMessageInner(params: HandleDingTalkMessageParams): 
         legacyCardStreamReasoning === undefined
           ? dingtalkConfig
           : { ...dingtalkConfig, cardStreamReasoning: legacyCardStreamReasoning };
-      const sessionTaskState = getSessionState(accountId, taskInfoConversationId);
+      const sessionTaskState = getSessionState(sessionTaskStateScope);
       const taskMeta = {
         model: sessionTaskState?.model,
         effort: sessionTaskState?.effort,
@@ -2184,11 +2195,7 @@ async function handleDingTalkMessageInner(params: HandleDingTalkMessageParams): 
           typeof sessionTaskState?.taskStartTime === "number"
             ? Math.max(0, Date.now() - sessionTaskState.taskStartTime)
             : undefined,
-        agent: getAgentDisplayName({
-          subAgentOptions,
-          agentId: route.agentId,
-          agentsList: cfg.agents?.list,
-        }),
+        agent: agentDisplayName,
       };
 
       const strategy = createReplyStrategy({
