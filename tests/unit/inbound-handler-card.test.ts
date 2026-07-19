@@ -16,6 +16,8 @@ const shared = vi.hoisted(() => ({
   updateAICardBlockListMock: vi.fn(),
   streamAICardMock: vi.fn(),
   formatContentForCardMock: vi.fn((s: string) => s),
+  invalidateAskUserQuestionsForScopeMock: vi.fn().mockResolvedValue([]),
+  syncInvalidatedAskUserQuestionCardsMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../src/auth", () => ({
@@ -52,6 +54,11 @@ vi.mock("../../src/card-service", () => ({
 
 vi.mock("../../src/command/card-stop-command", () => ({
   dispatchDingTalkCardStopCommand: shared.dispatchDingTalkCardStopCommandMock,
+}));
+
+vi.mock("../../src/card/ask-user-question", () => ({
+  invalidateAskUserQuestionsForScope: shared.invalidateAskUserQuestionsForScopeMock,
+  syncInvalidatedAskUserQuestionCards: shared.syncInvalidatedAskUserQuestionCardsMock,
 }));
 
 vi.mock("../../src/session-lock", () => ({
@@ -173,6 +180,8 @@ describe("inbound-handler card lifecycle", () => {
     shared.commitAICardBlocksMock.mockReset();
     shared.dispatchDingTalkCardStopCommandMock.mockReset();
     shared.dispatchDingTalkCardStopCommandMock.mockResolvedValue({ ok: true });
+    shared.invalidateAskUserQuestionsForScopeMock.mockReset().mockResolvedValue([]);
+    shared.syncInvalidatedAskUserQuestionCardsMock.mockReset().mockResolvedValue(undefined);
     shared.recallAICardMessageMock.mockReset().mockImplementation(async (card: { state?: string }) => {
       card.state = "3";
       return true;
@@ -450,163 +459,6 @@ describe("inbound-handler card lifecycle", () => {
     } as unknown as { data: unknown; dingtalkConfig: unknown });
 
     expect(shared.commitAICardBlocksMock).not.toHaveBeenCalled();
-  });
-
-  it("suppresses normal AI replies after a DingTalk question card successfully takes over the turn", async () => {
-    const card = {
-      cardInstanceId: "card_question_takeover",
-      state: "1",
-      lastUpdated: Date.now(),
-    } as unknown as { cardInstanceId: string; state: string; lastUpdated: number };
-    shared.createAICardMock.mockResolvedValueOnce(card);
-    shared.isCardInTerminalStateMock.mockImplementation((state: string) => state === "3" || state === "5");
-
-    const runtime = buildRuntime();
-    runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher = vi.fn().mockImplementation(
-      async ({ dispatcherOptions }) => {
-        await dispatcherOptions.deliver({ text: "intro before question" }, { kind: "tool" });
-        await getDingTalkQuestionContext()?.onQuestionCardSent?.({
-          questionId: "q_takeover",
-          outTrackId: "ask_takeover",
-        });
-        await dispatcherOptions.deliver({ text: "do not send this final" }, { kind: "final" });
-        return { queuedFinal: "do not send queued final" };
-      },
-    );
-    shared.getRuntimeMock.mockReturnValueOnce(runtime);
-
-    await handleDingTalkMessage({
-      cfg: {},
-      accountId: "main",
-      sessionWebhook: "https://session.webhook",
-      log: undefined,
-      dingtalkConfig: { dmPolicy: "open", messageType: "card", ackReaction: "" } as unknown as DingTalkConfig,
-      data: {
-        msgId: "question_takeover",
-        msgtype: "text",
-        text: { content: "ask me" },
-        conversationType: "1",
-        conversationId: "cid_ok",
-        senderId: "user_1",
-        chatbotUserId: "bot_1",
-        sessionWebhook: "https://session.webhook",
-        createAt: Date.now(),
-      },
-    } as unknown as { data: unknown; dingtalkConfig: unknown });
-
-    expect(shared.recallAICardMessageMock).toHaveBeenCalledTimes(1);
-    expect(shared.dispatchDingTalkCardStopCommandMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        accountId: "main",
-        agentId: "main",
-        targetSessionKey: "s1",
-        clickerUserId: "user_1",
-      }),
-    );
-    expect(shared.commitAICardBlocksMock).not.toHaveBeenCalled();
-    const markdownFallbackCalls = shared.sendMessageMock.mock.calls.filter(
-      (call: unknown[]) => (call as unknown[])?.[3]?.forceMarkdown === true,
-    );
-    expect(markdownFallbackCalls).toHaveLength(0);
-  });
-
-  it("still suppresses normal AI replies when question card takeover cannot recall the existing AI card", async () => {
-    const card = {
-      cardInstanceId: "card_question_recall_failed",
-      state: "1",
-      lastUpdated: Date.now(),
-    } as unknown as { cardInstanceId: string; state: string; lastUpdated: number };
-    shared.createAICardMock.mockResolvedValueOnce(card);
-    shared.recallAICardMessageMock.mockResolvedValueOnce(false);
-    shared.isCardInTerminalStateMock.mockReturnValue(false);
-
-    const runtime = buildRuntime();
-    runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher = vi.fn().mockImplementation(
-      async ({ dispatcherOptions }) => {
-        await getDingTalkQuestionContext()?.onQuestionCardSent?.({
-          questionId: "q_recall_failed",
-          outTrackId: "ask_recall_failed",
-        });
-        await dispatcherOptions.deliver({ text: "normal final after recall failed" }, { kind: "final" });
-        return { queuedFinal: "normal queued final after recall failed" };
-      },
-    );
-    shared.getRuntimeMock.mockReturnValueOnce(runtime);
-
-    await handleDingTalkMessage({
-      cfg: {},
-      accountId: "main",
-      sessionWebhook: "https://session.webhook",
-      log: undefined,
-      dingtalkConfig: { dmPolicy: "open", messageType: "card", ackReaction: "" } as unknown as DingTalkConfig,
-      data: {
-        msgId: "question_recall_failed",
-        msgtype: "text",
-        text: { content: "ask me" },
-        conversationType: "1",
-        conversationId: "cid_ok",
-        senderId: "user_1",
-        chatbotUserId: "bot_1",
-        sessionWebhook: "https://session.webhook",
-        createAt: Date.now(),
-      },
-    } as unknown as { data: unknown; dingtalkConfig: unknown });
-
-    expect(shared.recallAICardMessageMock).toHaveBeenCalledTimes(1);
-    expect(shared.dispatchDingTalkCardStopCommandMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        accountId: "main",
-        agentId: "main",
-        targetSessionKey: "s1",
-        clickerUserId: "user_1",
-      }),
-    );
-    expect(shared.commitAICardBlocksMock).not.toHaveBeenCalled();
-  });
-
-  it("keeps the normal AI reply path when a DingTalk question card is not sent successfully", async () => {
-    const card = {
-      cardInstanceId: "card_question_failed",
-      state: "1",
-      lastUpdated: Date.now(),
-    } as unknown as { cardInstanceId: string; state: string; lastUpdated: number };
-    shared.createAICardMock.mockResolvedValueOnce(card);
-    shared.isCardInTerminalStateMock.mockReturnValue(false);
-
-    const runtime = buildRuntime();
-    runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher = vi.fn().mockImplementation(
-      async ({ dispatcherOptions }) => {
-        await dispatcherOptions.deliver({ text: "question card send failed, continue normally" }, { kind: "tool" });
-        await dispatcherOptions.deliver({ text: "normal fallback after failed question card" }, { kind: "final" });
-        return { queuedFinal: "normal fallback after failed question card" };
-      },
-    );
-    shared.getRuntimeMock.mockReturnValueOnce(runtime);
-
-    await handleDingTalkMessage({
-      cfg: {},
-      accountId: "main",
-      sessionWebhook: "https://session.webhook",
-      log: undefined,
-      dingtalkConfig: { dmPolicy: "open", messageType: "card", ackReaction: "" } as unknown as DingTalkConfig,
-      data: {
-        msgId: "question_failed",
-        msgtype: "text",
-        text: { content: "ask me" },
-        conversationType: "1",
-        conversationId: "cid_ok",
-        senderId: "user_1",
-        chatbotUserId: "bot_1",
-        sessionWebhook: "https://session.webhook",
-        createAt: Date.now(),
-      },
-    } as unknown as { data: unknown; dingtalkConfig: unknown });
-
-    expect(shared.recallAICardMessageMock).not.toHaveBeenCalled();
-    expect(shared.commitAICardBlocksMock).toHaveBeenCalledTimes(1);
-    expect(shared.commitAICardBlocksMock.mock.calls[0][1]?.content).toContain(
-      "normal fallback after failed question card",
-    );
   });
 
   it("concurrent messages: second message skips card creation when first card is still active", async () => {

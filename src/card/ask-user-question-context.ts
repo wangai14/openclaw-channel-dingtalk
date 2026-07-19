@@ -4,6 +4,8 @@ import type {
   DingTalkInboundMessage,
   HandleDingTalkMessageParams,
   Logger,
+  ResolvedDingTalkRoute,
+  SubAgentOptions,
 } from "../types";
 
 export type DingTalkQuestionContext = {
@@ -13,8 +15,14 @@ export type DingTalkQuestionContext = {
   sessionWebhook: string;
   log?: Logger;
   dingtalkConfig: DingTalkConfig;
+  storePath?: string;
   questionScopeKey?: string;
-  onQuestionCardSent?: (event: { questionId: string; outTrackId: string }) => void | Promise<void>;
+  resolvedRoute?: ResolvedDingTalkRoute;
+  continuationSubAgentOptions?: Omit<SubAgentOptions, "commandText">;
+  onQuestionCardSent?: (event: {
+    questionId: string;
+    outTrackId: string;
+  }) => boolean | void | Promise<boolean | void>;
 };
 
 const questionContextStorage = new AsyncLocalStorage<DingTalkQuestionContext>();
